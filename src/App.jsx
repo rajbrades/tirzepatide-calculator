@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Calculator, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { Calculator, Plus, Trash2, AlertCircle, DollarSign } from 'lucide-react';
 
 const TirzepatideCalculator = () => {
   const standardTitration = [
@@ -11,10 +11,12 @@ const TirzepatideCalculator = () => {
   ];
 
   const vialOptions = [
-    { id: 1, name: '10mg/ml - 2cc vial', concentration: 10, volume: 2 },
-    { id: 2, name: '20mg/ml - 3cc vial', concentration: 20, volume: 3 },
-    { id: 3, name: '16.6mg/ml - 2cc vial', concentration: 16.6, volume: 2 },
-    { id: 4, name: '16.6mg/ml - 4.5cc vial', concentration: 16.6, volume: 4.5 }
+    { id: 1, name: '10mg/ml Pyridoxine 2mg/ml - 2cc vial', concentration: 10, volume: 2, cost: 94.00, retail: 349.00 },
+    { id: 2, name: '20mg/ml Pyridoxine 2mg/ml - 3cc vial', concentration: 20, volume: 3, cost: 169.00, retail: 769.00 },
+    { id: 3, name: '16.6mg/ml Glycine 7.5mg/ml - 2cc vial', concentration: 16.6, volume: 2, cost: 264.00, retail: 600.00 },
+    { id: 4, name: '16.6mg/ml Niacinamide 2mg/ml - 2cc vial', concentration: 16.6, volume: 2, cost: 264.00, retail: 600.00 },
+    { id: 5, name: '16.6mg/ml Niacinamide 2mg/ml - 4.5cc vial', concentration: 16.6, volume: 4.5, cost: 491.00, retail: 1050.00 },
+    { id: 6, name: '16.6mg/ml Glycine 7.5mg/ml - 4.5cc vial', concentration: 16.6, volume: 4.5, cost: 491.00, retail: 1050.00 }
   ];
 
   const [selectedVial, setSelectedVial] = useState(vialOptions[0]);
@@ -58,6 +60,22 @@ const TirzepatideCalculator = () => {
   const vialsNeeded = useMemo(() => {
     return Math.ceil(totalVolume / selectedVial.volume);
   }, [totalVolume, selectedVial]);
+
+  const costCalculations = useMemo(() => {
+    const totalCost = vialsNeeded * selectedVial.cost;
+    const totalRetail = vialsNeeded * selectedVial.retail;
+    const totalProfit = totalRetail - totalCost;
+    const profitMargin = totalRetail > 0 ? ((totalProfit / totalRetail) * 100) : 0;
+    
+    return {
+      totalCost,
+      totalRetail,
+      totalProfit,
+      profitMargin,
+      costPerVial: selectedVial.cost,
+      retailPerVial: selectedVial.retail
+    };
+  }, [vialsNeeded, selectedVial]);
 
   const addCustomWeek = () => {
     const lastWeek = customTitration[customTitration.length - 1];
@@ -207,6 +225,27 @@ const TirzepatideCalculator = () => {
             )}
           </div>
 
+          {/* Pricing Display */}
+          <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+            <div className="flex items-center gap-2 mb-2">
+              <DollarSign className="w-5 h-5 text-green-600" />
+              <h2 className="text-lg font-semibold text-gray-800">Current Vial Pricing</h2>
+            </div>
+            <div className="bg-white p-4 rounded-lg">
+              <div className="font-medium text-gray-800 mb-2">{selectedVial.name}</div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-600">Cost per Vial:</span>
+                  <span className="ml-2 font-semibold text-gray-900">${selectedVial.cost.toFixed(2)}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Retail per Vial:</span>
+                  <span className="ml-2 font-semibold text-gray-900">${selectedVial.retail.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="grid md:grid-cols-3 gap-4 mb-6">
             <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 p-6 rounded-xl text-white">
               <div className="text-sm opacity-90 mb-1">Total Volume Needed</div>
@@ -221,6 +260,20 @@ const TirzepatideCalculator = () => {
               <div className="text-sm opacity-90 mb-1">Duration</div>
               <div className="text-3xl font-bold">{duration} weeks</div>
               <div className="text-xs opacity-75 mt-1">({(duration / 4).toFixed(1)} months)</div>
+            </div>
+          </div>
+
+          {/* Cost Summary */}
+          <div className="grid md:grid-cols-2 gap-4 mb-6">
+            <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 rounded-xl text-white">
+              <div className="text-sm opacity-90 mb-1">Total Retail</div>
+              <div className="text-3xl font-bold">${costCalculations.totalRetail.toFixed(2)}</div>
+              <div className="text-xs opacity-75 mt-1">${costCalculations.retailPerVial.toFixed(2)} × {vialsNeeded} vials</div>
+            </div>
+            <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 p-6 rounded-xl text-white">
+              <div className="text-sm opacity-90 mb-1">Gross Margin</div>
+              <div className="text-3xl font-bold">{costCalculations.profitMargin.toFixed(1)}%</div>
+              <div className="text-xs opacity-75 mt-1">Of retail price</div>
             </div>
           </div>
 
