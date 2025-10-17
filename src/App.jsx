@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calculator, AlertCircle, DollarSign, MapPin, Loader2, Award, Package, Check, Copy, Droplet } from 'lucide-react';
+import { Calculator, AlertCircle, DollarSign, MapPin, Loader2, Award, Package, Check, Copy, Droplet, Building2 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -33,12 +34,12 @@ const TirzepatideCalculator = () => {
     const schedule = [];
     for (let week = 1; week <= totalWeeks; week++) {
       let dose;
-      if (week <= 4) dose = 2.5;           // Month 1: weeks 1-4
-      else if (week <= 8) dose = 5.0;      // Month 2: weeks 5-8
-      else if (week <= 12) dose = 7.5;     // Month 3: weeks 9-12
-      else if (week <= 16) dose = 10.0;    // Month 4: weeks 13-16
-      else if (week <= 20) dose = 12.5;    // Month 5: weeks 17-20
-      else dose = 15.0;                     // Month 6+: weeks 21+
+      if (week <= 4) dose = 2.5;
+      else if (week <= 8) dose = 5.0;
+      else if (week <= 12) dose = 7.5;
+      else if (week <= 16) dose = 10.0;
+      else if (week <= 20) dose = 12.5;
+      else dose = 15.0;
       schedule.push({ week, dose });
     }
     return schedule;
@@ -126,7 +127,6 @@ const TirzepatideCalculator = () => {
     return products.filter(product => canShipToState(product, selectedState));
   }, [products, selectedState, shippingRestrictions]);
 
-  // Initialize custom titration when duration changes
   useEffect(() => {
     setCustomTitration(generateMonthlyTitration(duration));
   }, [duration]);
@@ -145,7 +145,6 @@ const TirzepatideCalculator = () => {
     return titrationSchedule.reduce((sum, week) => sum + week.dose, 0);
   }, [titrationSchedule]);
 
-  // Calculate optimal vial combinations for each concentration
   const recommendations = useMemo(() => {
     if (!selectedState || availableProducts.length === 0) return [];
 
@@ -433,13 +432,17 @@ Total Dose: ${weeklySchedule.reduce((sum, week) => sum + week.dose, 0).toFixed(2
                         }`}
                       >
                         <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 flex-wrap">
                             {idx === 0 && (
                               <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full flex items-center gap-1">
                                 <Award className="w-3 h-3" />
                                 RECOMMENDED
                               </span>
                             )}
+                            <div className="flex items-center gap-2 px-4 py-2 bg-indigo-100 rounded-lg border-2 border-indigo-300">
+                              <Building2 className="w-5 h-5 text-indigo-700" />
+                              <span className="text-lg font-bold text-indigo-900">{rec.pharmacies.join(', ')}</span>
+                            </div>
                             <h3 className="text-xl font-bold text-gray-800">{rec.concentration}mg/ml Concentration</h3>
                           </div>
                           {selectedRecommendation === rec && (
@@ -448,6 +451,7 @@ Total Dose: ${weeklySchedule.reduce((sum, week) => sum + week.dose, 0).toFixed(2
                         </div>
 
                         <div className="grid md:grid-cols-3 gap-6">
+                          {/* Vials Column */}
                           <div>
                             <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Vials Required:</div>
                             <div className="space-y-1">
@@ -457,11 +461,9 @@ Total Dose: ${weeklySchedule.reduce((sum, week) => sum + week.dose, 0).toFixed(2
                                 </div>
                               ))}
                             </div>
-                            <div className="mt-2 pt-2 border-t text-xs text-gray-500">
-                              Pharmacy: {rec.pharmacies.join(', ')}
-                            </div>
                           </div>
 
+                          {/* Volume Column */}
                           <div>
                             <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Volume Details:</div>
                             <div className="space-y-2 text-sm">
@@ -480,6 +482,7 @@ Total Dose: ${weeklySchedule.reduce((sum, week) => sum + week.dose, 0).toFixed(2
                             </div>
                           </div>
 
+                          {/* Pricing Column */}
                           <div>
                             <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pricing:</div>
                             <div className="space-y-2 text-sm">
@@ -547,7 +550,10 @@ Total Dose: ${weeklySchedule.reduce((sum, week) => sum + week.dose, 0).toFixed(2
                         <div><span className="font-semibold">State:</span> {US_STATES.find(s => s.code === selectedState)?.name}</div>
                         <div><span className="font-semibold">Duration:</span> {duration} weeks</div>
                         <div><span className="font-semibold">Concentration:</span> {selectedRecommendation.concentration}mg/ml</div>
-                        <div><span className="font-semibold">Pharmacy:</span> {selectedRecommendation.pharmacies.join(', ')}</div>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-gray-600" />
+                          <span className="font-bold text-lg text-indigo-900">{selectedRecommendation.pharmacies.join(', ')}</span>
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <div><span className="font-semibold">Volume Needed:</span> {selectedRecommendation.volumeNeeded.toFixed(2)}ml</div>
