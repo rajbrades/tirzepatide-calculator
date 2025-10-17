@@ -1,7 +1,33 @@
-import React, { useState, useMemo } from 'react';
-import { Calculator, AlertCircle, DollarSign } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Calculator, AlertCircle, DollarSign, MapPin, Loader2 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 const TirzepatideCalculator = () => {
+  const US_STATES = [
+    { code: 'AL', name: 'Alabama' }, { code: 'AK', name: 'Alaska' }, { code: 'AZ', name: 'Arizona' },
+    { code: 'AR', name: 'Arkansas' }, { code: 'CA', name: 'California' }, { code: 'CO', name: 'Colorado' },
+    { code: 'CT', name: 'Connecticut' }, { code: 'DE', name: 'Delaware' }, { code: 'FL', name: 'Florida' },
+    { code: 'GA', name: 'Georgia' }, { code: 'HI', name: 'Hawaii' }, { code: 'ID', name: 'Idaho' },
+    { code: 'IL', name: 'Illinois' }, { code: 'IN', name: 'Indiana' }, { code: 'IA', name: 'Iowa' },
+    { code: 'KS', name: 'Kansas' }, { code: 'KY', name: 'Kentucky' }, { code: 'LA', name: 'Louisiana' },
+    { code: 'ME', name: 'Maine' }, { code: 'MD', name: 'Maryland' }, { code: 'MA', name: 'Massachusetts' },
+    { code: 'MI', name: 'Michigan' }, { code: 'MN', name: 'Minnesota' }, { code: 'MS', name: 'Mississippi' },
+    { code: 'MO', name: 'Missouri' }, { code: 'MT', name: 'Montana' }, { code: 'NE', name: 'Nebraska' },
+    { code: 'NV', name: 'Nevada' }, { code: 'NH', name: 'New Hampshire' }, { code: 'NJ', name: 'New Jersey' },
+    { code: 'NM', name: 'New Mexico' }, { code: 'NY', name: 'New York' }, { code: 'NC', name: 'North Carolina' },
+    { code: 'ND', name: 'North Dakota' }, { code: 'OH', name: 'Ohio' }, { code: 'OK', name: 'Oklahoma' },
+    { code: 'OR', name: 'Oregon' }, { code: 'PA', name: 'Pennsylvania' }, { code: 'RI', name: 'Rhode Island' },
+    { code: 'SC', name: 'South Carolina' }, { code: 'SD', name: 'South Dakota' }, { code: 'TN', name: 'Tennessee' },
+    { code: 'TX', name: 'Texas' }, { code: 'UT', name: 'Utah' }, { code: 'VT', name: 'Vermont' },
+    { code: 'VA', name: 'Virginia' }, { code: 'WA', name: 'Washington' }, { code: 'WV', name: 'West Virginia' },
+    { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' }
+  ];
+
   const standardTitration = [
     { week: 1, dose: 2.5 },
     { week: 2, dose: 3.75 },
@@ -10,21 +36,93 @@ const TirzepatideCalculator = () => {
     { week: 5, dose: 10 }
   ];
 
-  const vialOptions = [
-    { id: 1, name: '10mg/ml Pyridoxine 2mg/ml - 2cc vial', concentration: 10, volume: 2, cost: 94.00, retail: 349.00 },
-    { id: 2, name: '20mg/ml Pyridoxine 2mg/ml - 3cc vial', concentration: 20, volume: 3, cost: 169.00, retail: 769.00 },
-    { id: 3, name: '16.6mg/ml Glycine 7.5mg/ml - 2cc vial', concentration: 16.6, volume: 2, cost: 264.00, retail: 600.00 },
-    { id: 4, name: '16.6mg/ml Niacinamide 2mg/ml - 2cc vial', concentration: 16.6, volume: 2, cost: 264.00, retail: 600.00 },
-    { id: 5, name: '16.6mg/ml Niacinamide 2mg/ml - 4.5cc vial', concentration: 16.6, volume: 4.5, cost: 491.00, retail: 1050.00 },
-    { id: 6, name: '16.6mg/ml Glycine 7.5mg/ml - 4.5cc vial', concentration: 16.6, volume: 4.5, cost: 491.00, retail: 1050.00 }
-  ];
-
-  const [selectedVial, setSelectedVial] = useState(vialOptions[0]);
+  const [loading, setLoading] = useState(true);
+  const [pharmacies, setPharmacies] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [shippingRestrictions, setShippingRestrictions] = useState([]);
+  const [selectedState, setSelectedState] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const [duration, setDuration] = useState(8);
   const [useCustomTitration, setUseCustomTitration] = useState(false);
   const [customTitration, setCustomTitration] = useState(standardTitration);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true);
+
+        const { data: pharmaciesData, error: pharmaciesError } = await supabase
+          .from('pharmacies')
+          .select('*')
+          .eq('active', true)
+          .order('name');
+
+        if (pharmaciesError) throw pharmaciesError;
+
+        const { data: productsData, error: productsError } = await supabase
+          .from('products')
+          .select(`
+            *,
+            pharmacy:pharmacies(id, name)
+          `)
+          .eq('active', true)
+          .order('name');
+
+        if (productsError) throw productsError;
+
+        const { data: restrictionsData, error: restrictionsError } = await supabase
+          .from('shipping_restrictions')
+          .select('*');
+
+        if (restrictionsError) throw restrictionsError;
+
+        setPharmacies(pharmaciesData || []);
+        setProducts(productsData || []);
+        setShippingRestrictions(restrictionsData || []);
+        
+        if (productsData && productsData.length > 0) {
+          setSelectedProduct(productsData[0]);
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        alert('Error loading data. Please check your Supabase configuration.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+  const canShipToState = (product, state) => {
+    if (!state || !product) return true;
+    
+    const pharmacyRestrictions = shippingRestrictions.filter(
+      r => r.pharmacy_id === product.pharmacy_id
+    );
+
+    if (pharmacyRestrictions.length === 0) return true;
+
+    const stateRestriction = pharmacyRestrictions.find(r => r.state_code === state);
+    
+    if (!stateRestriction) {
+      const hasPositiveRestrictions = pharmacyRestrictions.some(r => r.can_ship === true);
+      return !hasPositiveRestrictions;
+    }
+
+    return stateRestriction.can_ship;
+  };
+
+  const availableProducts = useMemo(() => {
+    if (!selectedState) return products;
+    return products.filter(product => canShipToState(product, selectedState));
+  }, [products, selectedState, shippingRestrictions]);
+
+  const isSelectedProductAvailable = useMemo(() => {
+    return canShipToState(selectedProduct, selectedState);
+  }, [selectedProduct, selectedState, shippingRestrictions]);
+
+  useEffect(() => {
     const newCustomTitration = [];
     for (let week = 1; week <= duration; week++) {
       const existingCustom = customTitration.find(t => t.week === week);
@@ -47,6 +145,8 @@ const TirzepatideCalculator = () => {
   };
 
   const weeklySchedule = useMemo(() => {
+    if (!selectedProduct) return [];
+    
     const schedule = [];
     for (let week = 1; week <= duration; week++) {
       let dose;
@@ -59,30 +159,33 @@ const TirzepatideCalculator = () => {
           dose = standardTitration[standardTitration.length - 1].dose;
         }
       }
-      const dosage = calculateDosage(dose, selectedVial.concentration);
+      const dosage = calculateDosage(dose, selectedProduct.concentration);
       schedule.push({ week, dose, ...dosage });
     }
     return schedule;
-  }, [selectedVial, duration, useCustomTitration, customTitration]);
+  }, [selectedProduct, duration, useCustomTitration, customTitration]);
 
   const totalVolume = useMemo(() => {
     return weeklySchedule.reduce((sum, week) => sum + parseFloat(week.ml), 0);
   }, [weeklySchedule]);
 
   const vialsNeeded = useMemo(() => {
-    return Math.ceil(totalVolume / selectedVial.volume);
-  }, [totalVolume, selectedVial]);
+    if (!selectedProduct) return 0;
+    return Math.ceil(totalVolume / selectedProduct.volume);
+  }, [totalVolume, selectedProduct]);
 
   const costCalculations = useMemo(() => {
-    const totalCost = vialsNeeded * selectedVial.cost;
-    const totalRetail = vialsNeeded * selectedVial.retail;
+    if (!selectedProduct) return { totalCost: 0, totalRetail: 0, totalProfit: 0, profitMargin: 0, costPerVial: 0, retailPerVial: 0 };
+    
+    const totalCost = vialsNeeded * selectedProduct.cost;
+    const totalRetail = vialsNeeded * selectedProduct.retail_price;
     const totalProfit = totalRetail - totalCost;
     const profitMargin = totalRetail > 0 ? ((totalProfit / totalRetail) * 100) : 0;
     return {
       totalCost, totalRetail, totalProfit, profitMargin,
-      costPerVial: selectedVial.cost, retailPerVial: selectedVial.retail
+      costPerVial: selectedProduct.cost, retailPerVial: selectedProduct.retail_price
     };
-  }, [vialsNeeded, selectedVial]);
+  }, [vialsNeeded, selectedProduct]);
 
   const updateCustomDose = (index, value) => {
     const newTitration = [...customTitration];
@@ -103,6 +206,28 @@ const TirzepatideCalculator = () => {
     setUseCustomTitration(false);
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6 lg:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading calculator...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!selectedProduct) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6 lg:p-8 flex items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
+          <p className="text-gray-600">No products available. Please check your database configuration.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-6 lg:p-8">
       <div className="max-w-6xl mx-auto">
@@ -111,21 +236,78 @@ const TirzepatideCalculator = () => {
             <Calculator className="w-8 h-8 text-indigo-600" />
             <h1 className="text-3xl font-bold text-gray-800">Tirzepatide Dosage Calculator</h1>
           </div>
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">Vial Concentration & Volume</label>
-              <select value={selectedVial.id} onChange={(e) => setSelectedVial(vialOptions.find(v => v.id === parseInt(e.target.value)))} className="w-full p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                {vialOptions.map(vial => (<option key={vial.id} value={vial.id}>{vial.name}</option>))}
-              </select>
-              <div className="text-sm text-gray-600 mt-1">Concentration: {selectedVial.concentration}mg/ml | Volume: {selectedVial.volume}cc</div>
+
+          {selectedState && !isSelectedProductAvailable && (
+            <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-red-700">
+                  <p className="font-semibold mb-1">Shipping Restriction</p>
+                  <p>The selected product cannot be shipped to {US_STATES.find(s => s.code === selectedState)?.name}. Please select a different product or state.</p>
+                </div>
+              </div>
             </div>
+          )}
+
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-gray-700">Prescription Duration (weeks)</label>
-              <select value={duration} onChange={(e) => setDuration(parseInt(e.target.value))} className="w-full p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
-                {[4, 8, 12, 16, 20, 24].map(weeks => (<option key={weeks} value={weeks}>{weeks} weeks ({weeks / 4} months)</option>))}
+              <label className="block text-sm font-semibold text-gray-700">
+                <MapPin className="w-4 h-4 inline mr-1" />
+                Patient Delivery State
+              </label>
+              <select
+                value={selectedState}
+                onChange={(e) => setSelectedState(e.target.value)}
+                className="w-full p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="">Select State...</option>
+                {US_STATES.map(state => (
+                  <option key={state.code} value={state.code}>{state.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700">
+                Product Selection
+              </label>
+              <select
+                value={selectedProduct?.id || ''}
+                onChange={(e) => setSelectedProduct(products.find(p => p.id === e.target.value))}
+                className="w-full p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                {products.map(product => {
+                  const available = canShipToState(product, selectedState);
+                  return (
+                    <option key={product.id} value={product.id} disabled={!available}>
+                      {product.name} {!available ? '(Not available in selected state)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+              <div className="text-sm text-gray-600 mt-1">
+                Concentration: {selectedProduct.concentration}mg/ml | Volume: {selectedProduct.volume}cc
+                <br />
+                Pharmacy: {selectedProduct.pharmacy.name}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700">
+                Prescription Duration (weeks)
+              </label>
+              <select
+                value={duration}
+                onChange={(e) => setDuration(parseInt(e.target.value))}
+                className="w-full p-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                {[4, 8, 12, 16, 20, 24].map(weeks => (
+                  <option key={weeks} value={weeks}>{weeks} weeks ({weeks / 4} months)</option>
+                ))}
               </select>
             </div>
           </div>
+
           <div className="mb-6 p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-800">Titration Schedule</h2>
@@ -158,19 +340,21 @@ const TirzepatideCalculator = () => {
               </div>
             )}
           </div>
+
           <div className="mb-6 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
             <div className="flex items-center gap-2 mb-2">
               <DollarSign className="w-5 h-5 text-green-600" />
-              <h2 className="text-lg font-semibold text-gray-800">Current Vial Pricing</h2>
+              <h2 className="text-lg font-semibold text-gray-800">Current Product Pricing</h2>
             </div>
             <div className="bg-white p-4 rounded-lg">
-              <div className="font-medium text-gray-800 mb-2">{selectedVial.name}</div>
+              <div className="font-medium text-gray-800 mb-2">{selectedProduct.name}</div>
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-gray-600">Cost per Vial:</span><span className="ml-2 font-semibold text-gray-900">${selectedVial.cost.toFixed(2)}</span></div>
-                <div><span className="text-gray-600">Retail per Vial:</span><span className="ml-2 font-semibold text-gray-900">${selectedVial.retail.toFixed(2)}</span></div>
+                <div><span className="text-gray-600">Cost per Vial:</span><span className="ml-2 font-semibold text-gray-900">${selectedProduct.cost.toFixed(2)}</span></div>
+                <div><span className="text-gray-600">Retail per Vial:</span><span className="ml-2 font-semibold text-gray-900">${selectedProduct.retail_price.toFixed(2)}</span></div>
               </div>
             </div>
           </div>
+
           <div className="grid md:grid-cols-3 gap-4 mb-6">
             <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 p-6 rounded-xl text-white">
               <div className="text-sm opacity-90 mb-1">Total Volume Needed</div>
@@ -179,7 +363,7 @@ const TirzepatideCalculator = () => {
             <div className="bg-gradient-to-br from-purple-500 to-purple-600 p-6 rounded-xl text-white">
               <div className="text-sm opacity-90 mb-1">Vials Required</div>
               <div className="text-3xl font-bold">{vialsNeeded}</div>
-              <div className="text-xs opacity-75 mt-1">({selectedVial.volume}cc per vial)</div>
+              <div className="text-xs opacity-75 mt-1">({selectedProduct.volume}cc per vial)</div>
             </div>
             <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-xl text-white">
               <div className="text-sm opacity-90 mb-1">Duration</div>
@@ -187,6 +371,7 @@ const TirzepatideCalculator = () => {
               <div className="text-xs opacity-75 mt-1">({(duration / 4).toFixed(1)} months)</div>
             </div>
           </div>
+
           <div className="grid md:grid-cols-2 gap-4 mb-6">
             <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 rounded-xl text-white">
               <div className="text-sm opacity-90 mb-1">Total Retail</div>
@@ -199,6 +384,7 @@ const TirzepatideCalculator = () => {
               <div className="text-xs opacity-75 mt-1">Of retail price</div>
             </div>
           </div>
+
           <div className="overflow-x-auto">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">Weekly Injection Schedule</h2>
             <table className="w-full border-collapse">
@@ -230,6 +416,7 @@ const TirzepatideCalculator = () => {
               </tfoot>
             </table>
           </div>
+
           <div className="mt-6 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-lg">
             <div className="flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
@@ -240,6 +427,7 @@ const TirzepatideCalculator = () => {
                   <li>Always verify dosage calculations with your healthcare provider</li>
                   <li>Store reconstituted tirzepatide refrigerated (2-8°C)</li>
                   <li>After titration complete, maintenance dose continues for remaining weeks</li>
+                  <li>Shipping restrictions vary by pharmacy and state regulations</li>
                   <li>This calculator is for educational purposes only</li>
                 </ul>
               </div>
