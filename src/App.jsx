@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calculator, AlertCircle, Loader2, Award, Package, Check, Copy, Building2, Syringe, Droplet, MapPin } from 'lucide-react';
+import { Calculator, AlertCircle, Loader2, Award, Package, Check, Copy, Building2, Syringe, Droplet, MapPin, FileText, Truck, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -27,21 +27,474 @@ const US_STATES = [
   { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' }
 ];
 
+// Medication types for filtering
+const MEDICATION_TYPES = [
+  { value: '', label: 'All Medications' },
+  { value: 'tirzepatide', label: 'Tirzepatide' },
+  { value: 'semaglutide', label: 'Semaglutide' },
+  { value: 'testosterone', label: 'Testosterone' },
+  { value: 'thyroid', label: 'Thyroid' },
+  { value: 'naltrexone', label: 'Naltrexone' },
+  { value: 'sermorelin', label: 'Sermorelin' },
+  { value: 'sildenafil', label: 'Sildenafil' },
+  { value: 'tadalafil', label: 'Tadalafil' },
+];
+
+// Ship To State Lookup Component
+const ShipToStateLookup = () => {
+  const [loading, setLoading] = useState(true);
+  const [pharmacies, setPharmacies] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [shippingRestrictions, setShippingRestrictions] = useState([]);
+  const [selectedState, setSelectedState] = useState('');
+  const [selectedMedication, setSelectedMedication] = useState('');
+  const [expandedPharmacy, setExpandedPharmacy] = useState(null);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true);
+        const [pharmaciesRes, restrictionsRes, productsRes] = await Promise.all([
+          supabase.from('pharmacies').select('*').eq('active', true).order('name'),
+          supabase.from('shipping_restrictions').select('*'),
+          supabase.from('products').select('*').eq('active', true)
+        ]);
+
+        if (pharmaciesRes.error) throw pharmaciesRes.error;
+        if (restrictionsRes.error) throw restrictionsRes.error;
+        if (productsRes.error) throw productsRes.error;
+
+        setPharmacies(pharmaciesRes.data || []);
+        setShippingRestrictions(restrictionsRes.data || []);
+        setProducts(productsRes.data || []);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  // Get products for a pharmacy, optionally filtered by medication type
+  const getPharmacyProducts = (pharmacyId, medicationType = '') => {
+    let pharmacyProducts = products.filter(p => p.pharmacy_id === pharmacyId);
+
+    if (medicationType) {
+      pharmacyProducts = pharmacyProducts.filter(p =>
+        p.name.toLowerCase().includes(medicationType.toLowerCase())
+      );
+    }
+
+    return pharmacyProducts;
+  };
+
+  // Check if pharmacy has products matching the medication filter
+  const pharmacyHasMedication = (pharmacyId, medicationType) => {
+    if (!medicationType) return true;
+    return getPharmacyProducts(pharmacyId, medicationType).length > 0;
+  };
+
+  const getPharmacyStatus = (pharmacyId, stateCode) => {
+    if (!stateCode) return { canShip: null, notes: null };
+
+    const restriction = shippingRestrictions.find(
+      r => r.pharmacy_id === pharmacyId && r.state_code === stateCode
+    );
+
+    if (!restriction) {
+      // No restriction found = can ship
+      return { canShip: true, notes: null };
+    }
+
+    return { canShip: restriction.can_ship, notes: restriction.notes };
+  };
+
+  const getPharmaciesForState = (stateCode, medicationType = '') => {
+    if (!stateCode) return { canShip: [], limited: [], cannotShip: [], noProducts: [] };
+
+    const canShip = [];
+    const limited = [];
+    const cannotShip = [];
+    const noProducts = [];
+
+    pharmacies.forEach(pharmacy => {
+      const status = getPharmacyStatus(pharmacy.id, stateCode);
+      const hasMedication = pharmacyHasMedication(pharmacy.id, medicationType);
+      const pharmacyProducts = getPharmacyProducts(pharmacy.id, medicationType);
+
+      const pharmacyData = {
+        ...pharmacy,
+        notes: status.notes,
+        products: pharmacyProducts,
+        productCount: pharmacyProducts.length
+      };
+
+      // If filtering by medication and pharmacy doesn't have it
+      if (medicationType && !hasMedication) {
+        noProducts.push(pharmacyData);
+      } else if (status.canShip === false) {
+        cannotShip.push(pharmacyData);
+      } else if (status.notes) {
+        limited.push(pharmacyData);
+      } else {
+        canShip.push(pharmacyData);
+      }
+    });
+
+    return { canShip, limited, cannotShip, noProducts };
+  };
+
+  const pharmacyStatusByState = useMemo(() => {
+    if (!selectedState) return null;
+    return getPharmaciesForState(selectedState, selectedMedication);
+  }, [selectedState, selectedMedication, pharmacies, shippingRestrictions, products]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        <span className="ml-3 text-gray-600">Loading pharmacy data...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="text-center mb-8">
+        <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Truck className="w-8 h-8 text-indigo-600" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Ship To State Lookup</h2>
+        <p className="text-gray-600">Check which pharmacies can ship to a specific state</p>
+      </div>
+
+      <div className="max-w-3xl mx-auto mb-8">
+        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border-2 border-indigo-200 p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-3">Select State</label>
+              <select
+                value={selectedState}
+                onChange={(e) => setSelectedState(e.target.value)}
+                className="w-full p-4 text-lg border-2 border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+              >
+                <option value="">Select a state...</option>
+                {US_STATES.map(state => (
+                  <option key={state.code} value={state.code}>{state.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-3">Filter by Medication (Optional)</label>
+              <select
+                value={selectedMedication}
+                onChange={(e) => setSelectedMedication(e.target.value)}
+                className="w-full p-4 text-lg border-2 border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+              >
+                {MEDICATION_TYPES.map(med => (
+                  <option key={med.value} value={med.value}>{med.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {selectedMedication && (
+            <div className="mt-3 text-sm text-indigo-700 bg-indigo-100 px-3 py-2 rounded-lg">
+              Showing only pharmacies that carry <strong>{MEDICATION_TYPES.find(m => m.value === selectedMedication)?.label}</strong>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {selectedState && pharmacyStatusByState && (
+        <div className="space-y-6">
+          {/* Summary Cards */}
+          <div className={`grid gap-4 mb-6 ${selectedMedication ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-center">
+              <CheckCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
+              <div className="text-3xl font-bold text-green-700">{pharmacyStatusByState.canShip.length}</div>
+              <div className="text-sm text-green-600 font-medium">Can Ship</div>
+            </div>
+            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 text-center">
+              <AlertTriangle className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
+              <div className="text-3xl font-bold text-yellow-700">{pharmacyStatusByState.limited.length}</div>
+              <div className="text-sm text-yellow-600 font-medium">Some Limitations</div>
+            </div>
+            <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 text-center">
+              <XCircle className="w-8 h-8 text-red-600 mx-auto mb-2" />
+              <div className="text-3xl font-bold text-red-700">{pharmacyStatusByState.cannotShip.length}</div>
+              <div className="text-sm text-red-600 font-medium">Cannot Ship</div>
+            </div>
+            {selectedMedication && (
+              <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-4 text-center">
+                <Package className="w-8 h-8 text-gray-500 mx-auto mb-2" />
+                <div className="text-3xl font-bold text-gray-600">{pharmacyStatusByState.noProducts.length}</div>
+                <div className="text-sm text-gray-500 font-medium">No Product</div>
+              </div>
+            )}
+          </div>
+
+          {/* Can Ship */}
+          {pharmacyStatusByState.canShip.length > 0 && (
+            <div className="bg-white rounded-xl border-2 border-green-200 overflow-hidden">
+              <div className="bg-green-50 px-6 py-3 border-b border-green-200">
+                <h3 className="font-semibold text-green-800 flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5" />
+                  Can Ship to {US_STATES.find(s => s.code === selectedState)?.name}
+                  {selectedMedication && <span className="text-sm font-normal">({MEDICATION_TYPES.find(m => m.value === selectedMedication)?.label})</span>}
+                </h3>
+              </div>
+              <div className="p-4">
+                <div className="space-y-3">
+                  {pharmacyStatusByState.canShip.map(pharmacy => (
+                    <div key={pharmacy.id} className="border border-green-200 rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => setExpandedPharmacy(expandedPharmacy === pharmacy.id ? null : pharmacy.id)}
+                        className="w-full flex items-center justify-between p-3 bg-green-50 hover:bg-green-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                          <span className="font-medium text-gray-800">{pharmacy.name}</span>
+                          {pharmacy.productCount > 0 && (
+                            <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded-full">
+                              {pharmacy.productCount} product{pharmacy.productCount !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-green-600 text-sm">
+                          {expandedPharmacy === pharmacy.id ? '▲ Hide' : '▼ Show Products'}
+                        </span>
+                      </button>
+                      {expandedPharmacy === pharmacy.id && pharmacy.products.length > 0 && (
+                        <div className="p-3 bg-white border-t border-green-200">
+                          <div className="grid gap-2">
+                            {pharmacy.products.map(product => (
+                              <div key={product.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded">
+                                <span className="text-gray-700">{product.name}</span>
+                                <span className="font-semibold text-gray-900">${product.cost?.toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {expandedPharmacy === pharmacy.id && pharmacy.products.length === 0 && (
+                        <div className="p-3 bg-white border-t border-green-200 text-sm text-gray-500 italic">
+                          No products in database for this pharmacy
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Some Limitations */}
+          {pharmacyStatusByState.limited.length > 0 && (
+            <div className="bg-white rounded-xl border-2 border-yellow-200 overflow-hidden">
+              <div className="bg-yellow-50 px-6 py-3 border-b border-yellow-200">
+                <h3 className="font-semibold text-yellow-800 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5" />
+                  Some Limitations
+                  {selectedMedication && <span className="text-sm font-normal">({MEDICATION_TYPES.find(m => m.value === selectedMedication)?.label})</span>}
+                </h3>
+              </div>
+              <div className="p-4">
+                <div className="space-y-3">
+                  {pharmacyStatusByState.limited.map(pharmacy => (
+                    <div key={pharmacy.id} className="border border-yellow-200 rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => setExpandedPharmacy(expandedPharmacy === pharmacy.id ? null : pharmacy.id)}
+                        className="w-full flex items-center justify-between p-3 bg-yellow-50 hover:bg-yellow-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+                          <div className="text-left">
+                            <span className="font-medium text-gray-800">{pharmacy.name}</span>
+                            {pharmacy.notes && (
+                              <div className="text-xs text-yellow-700">{pharmacy.notes}</div>
+                            )}
+                          </div>
+                          {pharmacy.productCount > 0 && (
+                            <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-0.5 rounded-full">
+                              {pharmacy.productCount} product{pharmacy.productCount !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-yellow-600 text-sm">
+                          {expandedPharmacy === pharmacy.id ? '▲ Hide' : '▼ Show Products'}
+                        </span>
+                      </button>
+                      {expandedPharmacy === pharmacy.id && pharmacy.products.length > 0 && (
+                        <div className="p-3 bg-white border-t border-yellow-200">
+                          <div className="grid gap-2">
+                            {pharmacy.products.map(product => (
+                              <div key={product.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded">
+                                <span className="text-gray-700">{product.name}</span>
+                                <span className="font-semibold text-gray-900">${product.cost?.toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {expandedPharmacy === pharmacy.id && pharmacy.products.length === 0 && (
+                        <div className="p-3 bg-white border-t border-yellow-200 text-sm text-gray-500 italic">
+                          No products in database for this pharmacy
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Cannot Ship */}
+          {pharmacyStatusByState.cannotShip.length > 0 && (
+            <div className="bg-white rounded-xl border-2 border-red-200 overflow-hidden">
+              <div className="bg-red-50 px-6 py-3 border-b border-red-200">
+                <h3 className="font-semibold text-red-800 flex items-center gap-2">
+                  <XCircle className="w-5 h-5" />
+                  Cannot Ship to {US_STATES.find(s => s.code === selectedState)?.name}
+                  {selectedMedication && <span className="text-sm font-normal">({MEDICATION_TYPES.find(m => m.value === selectedMedication)?.label})</span>}
+                </h3>
+              </div>
+              <div className="p-4">
+                <div className="space-y-3">
+                  {pharmacyStatusByState.cannotShip.map(pharmacy => (
+                    <div key={pharmacy.id} className="border border-red-200 rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => setExpandedPharmacy(expandedPharmacy === pharmacy.id ? null : pharmacy.id)}
+                        className="w-full flex items-center justify-between p-3 bg-red-50 hover:bg-red-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                          <span className="font-medium text-gray-800">{pharmacy.name}</span>
+                          {pharmacy.productCount > 0 && (
+                            <span className="text-xs bg-red-200 text-red-800 px-2 py-0.5 rounded-full">
+                              {pharmacy.productCount} product{pharmacy.productCount !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-red-600 text-sm">
+                          {expandedPharmacy === pharmacy.id ? '▲ Hide' : '▼ Show Products'}
+                        </span>
+                      </button>
+                      {expandedPharmacy === pharmacy.id && pharmacy.products.length > 0 && (
+                        <div className="p-3 bg-white border-t border-red-200">
+                          <div className="grid gap-2">
+                            {pharmacy.products.map(product => (
+                              <div key={product.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded">
+                                <span className="text-gray-700">{product.name}</span>
+                                <span className="font-semibold text-gray-900">${product.cost?.toFixed(2)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {expandedPharmacy === pharmacy.id && pharmacy.products.length === 0 && (
+                        <div className="p-3 bg-white border-t border-red-200 text-sm text-gray-500 italic">
+                          No products in database for this pharmacy
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* No Products (when filtering by medication) */}
+          {selectedMedication && pharmacyStatusByState.noProducts.length > 0 && (
+            <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
+              <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
+                <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                  <Package className="w-5 h-5" />
+                  No {MEDICATION_TYPES.find(m => m.value === selectedMedication)?.label} Products
+                </h3>
+              </div>
+              <div className="p-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {pharmacyStatusByState.noProducts.map(pharmacy => (
+                    <div key={pharmacy.id} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
+                      <Package className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                      <span className="font-medium text-gray-600">{pharmacy.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Full Matrix Table */}
+          <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden mt-8">
+            <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
+              <h3 className="font-semibold text-gray-800">All Pharmacies - Shipping Matrix</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700 sticky left-0 bg-gray-100">Pharmacy</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pharmacies.map((pharmacy, idx) => {
+                    const status = getPharmacyStatus(pharmacy.id, selectedState);
+                    return (
+                      <tr key={pharmacy.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="px-4 py-3 font-medium text-gray-900 sticky left-0 bg-inherit">
+                          {pharmacy.name}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {status.canShip === false ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">
+                              <XCircle className="w-3 h-3" /> No
+                            </span>
+                          ) : status.notes ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">
+                              <AlertTriangle className="w-3 h-3" /> Limited
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                              <CheckCircle className="w-3 h-3" /> Yes
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          {status.notes || '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const MedicationCalculator = () => {
   const [selectedState, setSelectedState] = useState('');
   const [selectedMedication, setSelectedMedication] = useState('tirzepatide');
+  const [activeTab, setActiveTab] = useState('calculators'); // 'calculators' or 'shipping'
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Calculator className="w-8 h-8 text-indigo-600" />
-              <h1 className="text-3xl font-bold text-gray-800">Medication Dosage Calculator</h1>
+              <h1 className="text-3xl font-bold text-gray-800">10X Medication Calculator</h1>
             </div>
-            
-            {selectedState && (
+
+            {activeTab === 'calculators' && selectedState && (
               <button
                 onClick={() => setSelectedState('')}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-100 hover:bg-indigo-200 rounded-lg transition-colors group"
@@ -56,64 +509,96 @@ const MedicationCalculator = () => {
             )}
           </div>
 
-          {!selectedState ? (
-            <div className="max-w-2xl mx-auto py-12">
-              <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <MapPin className="w-8 h-8 text-indigo-600" />
-                </div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">Where should we ship?</h2>
-                <p className="text-gray-600">Select the patient's delivery state to see available products and pricing</p>
-              </div>
+          {/* Main Navigation Tabs */}
+          <div className="flex gap-2 mb-6 border-b border-gray-200">
+            <button
+              onClick={() => setActiveTab('calculators')}
+              className={`flex items-center gap-2 px-6 py-3 font-semibold transition-all border-b-2 ${
+                activeTab === 'calculators'
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Calculator className="w-5 h-5" />
+              Dosage Calculators
+            </button>
+            <button
+              onClick={() => setActiveTab('shipping')}
+              className={`flex items-center gap-2 px-6 py-3 font-semibold transition-all border-b-2 ${
+                activeTab === 'shipping'
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Truck className="w-5 h-5" />
+              Ship To State Lookup
+            </button>
+          </div>
 
-              <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border-2 border-indigo-200 p-8">
-                <label className="block text-sm font-semibold text-gray-700 mb-3">Patient Delivery State</label>
-                <select
-                  value={selectedState}
-                  onChange={(e) => setSelectedState(e.target.value)}
-                  className="w-full p-4 text-lg border-2 border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-                  autoFocus
-                >
-                  <option value="">Select a state...</option>
-                  {US_STATES.map(state => (
-                    <option key={state.code} value={state.code}>{state.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          ) : (
+          {activeTab === 'calculators' ? (
             <>
-              <div className="flex gap-2 mb-8 border-b border-gray-200">
-                <button
-                  onClick={() => setSelectedMedication('tirzepatide')}
-                  className={`flex items-center gap-2 px-6 py-3 font-semibold transition-all border-b-2 ${
-                    selectedMedication === 'tirzepatide'
-                      ? 'border-indigo-600 text-indigo-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Syringe className="w-5 h-5" />
-                  Tirzepatide (Injectable)
-                </button>
-                <button
-                  onClick={() => setSelectedMedication('testosterone')}
-                  className={`flex items-center gap-2 px-6 py-3 font-semibold transition-all border-b-2 ${
-                    selectedMedication === 'testosterone'
-                      ? 'border-indigo-600 text-indigo-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  <Droplet className="w-5 h-5" />
-                  Testosterone (Topical)
-                </button>
-              </div>
+              {!selectedState ? (
+                <div className="max-w-2xl mx-auto py-12">
+                  <div className="text-center mb-8">
+                    <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <MapPin className="w-8 h-8 text-indigo-600" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-2">Where should we ship?</h2>
+                    <p className="text-gray-600">Select the patient's delivery state to see available products and pricing</p>
+                  </div>
 
-              {selectedMedication === 'tirzepatide' ? (
-                <TirzepatideCalculator selectedState={selectedState} />
+                  <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border-2 border-indigo-200 p-8">
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">Patient Delivery State</label>
+                    <select
+                      value={selectedState}
+                      onChange={(e) => setSelectedState(e.target.value)}
+                      className="w-full p-4 text-lg border-2 border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                      autoFocus
+                    >
+                      <option value="">Select a state...</option>
+                      {US_STATES.map(state => (
+                        <option key={state.code} value={state.code}>{state.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               ) : (
-                <TestosteroneCalculator selectedState={selectedState} />
+                <>
+                  <div className="flex gap-2 mb-8 border-b border-gray-200">
+                    <button
+                      onClick={() => setSelectedMedication('tirzepatide')}
+                      className={`flex items-center gap-2 px-6 py-3 font-semibold transition-all border-b-2 ${
+                        selectedMedication === 'tirzepatide'
+                          ? 'border-indigo-600 text-indigo-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      <Syringe className="w-5 h-5" />
+                      Tirzepatide (Injectable)
+                    </button>
+                    <button
+                      onClick={() => setSelectedMedication('testosterone')}
+                      className={`flex items-center gap-2 px-6 py-3 font-semibold transition-all border-b-2 ${
+                        selectedMedication === 'testosterone'
+                          ? 'border-indigo-600 text-indigo-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      <Droplet className="w-5 h-5" />
+                      Testosterone (Topical)
+                    </button>
+                  </div>
+
+                  {selectedMedication === 'tirzepatide' ? (
+                    <TirzepatideCalculator selectedState={selectedState} />
+                  ) : (
+                    <TestosteroneCalculator selectedState={selectedState} />
+                  )}
+                </>
               )}
             </>
+          ) : (
+            <ShipToStateLookup />
           )}
         </div>
       </div>
@@ -158,6 +643,8 @@ const TirzepatideCalculator = ({ selectedState }) => {
   const [customTitration, setCustomTitration] = useState([]);
   const [selectedRecommendation, setSelectedRecommendation] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [directiveConcentration, setDirectiveConcentration] = useState(null);
+  const [directiveCopied, setDirectiveCopied] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -328,6 +815,35 @@ ${customTitration.map(w => `Week ${w.week}: ${w.dose}mg (${(w.dose / recommendat
     setCustomTitration(updated);
   };
 
+  const getMedicalDirective = (concentration) => {
+    const stages = getTitrationStages(duration);
+    return stages.map(stage => {
+      const volume = stage.dose / concentration;
+      const units = volume * 100;
+      return {
+        ...stage,
+        volume: volume.toFixed(2),
+        units: Math.round(units)
+      };
+    });
+  };
+
+  const copyMedicalDirective = () => {
+    if (!directiveConcentration) return;
+
+    const directive = getMedicalDirective(directiveConcentration);
+    const text = directive.map(stage =>
+`${stage.label} (Weeks ${stage.weeks}):
+  Dose: ${stage.dose}mg
+  Volume: ${stage.volume}ml (${stage.units} units)
+  Inject once weekly subcutaneously`
+).join('\n\n');
+
+    navigator.clipboard.writeText(text);
+    setDirectiveCopied(true);
+    setTimeout(() => setDirectiveCopied(false), 2000);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -431,8 +947,8 @@ ${customTitration.map(w => `Week ${w.week}: ${w.dose}mg (${(w.dose / recommendat
       {recommendations.length > 0 ? (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-4">
-            <span className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm">4</span>
-            <h2 className="text-lg font-semibold text-gray-800">Product Recommendations</h2>
+            <span className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm">3</span>
+            <h2 className="text-lg font-semibold text-gray-800">Select Product</h2>
             <span className="text-sm text-gray-500 ml-2">(Ranked by Least Overage)</span>
           </div>
 
@@ -440,26 +956,38 @@ ${customTitration.map(w => `Week ${w.week}: ${w.dose}mg (${(w.dose / recommendat
             {recommendations.map((rec, idx) => (
               <div
                 key={idx}
-                className={`bg-white rounded-xl border-2 p-6 transition-all ${
-                  idx === 0 
-                    ? 'border-green-300 shadow-md' 
-                    : 'border-gray-200'
+                className={`bg-white rounded-xl border-2 p-6 transition-all cursor-pointer ${
+                  selectedRecommendation === rec
+                    ? 'border-indigo-500 shadow-lg ring-2 ring-indigo-200'
+                    : idx === 0
+                      ? 'border-green-300 shadow-md hover:border-indigo-300'
+                      : 'border-gray-200 hover:border-indigo-300'
                 }`}
+                onClick={() => {
+                  setSelectedRecommendation(rec);
+                  setDirectiveConcentration(rec.concentration);
+                }}
               >
                 <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3 flex-1">
-                    {idx === 0 && (
+                  <div className="flex items-center gap-3 flex-1 flex-wrap">
+                    {selectedRecommendation === rec && (
+                      <div className="flex items-center gap-2 px-3 py-1 bg-indigo-100 border border-indigo-300 rounded-full">
+                        <Check className="w-4 h-4 text-indigo-700" />
+                        <span className="text-xs font-semibold text-indigo-700 uppercase">Selected</span>
+                      </div>
+                    )}
+                    {idx === 0 && selectedRecommendation !== rec && (
                       <div className="flex items-center gap-2 px-3 py-1 bg-green-100 border border-green-300 rounded-full">
                         <Award className="w-4 h-4 text-green-700" />
                         <span className="text-xs font-semibold text-green-700 uppercase">Recommended</span>
                       </div>
                     )}
-                    
+
                     <div className="flex items-center gap-2 px-3 py-1 bg-indigo-100 border border-indigo-300 rounded-full">
                       <Building2 className="w-4 h-4 text-indigo-700" />
                       <span className="text-sm font-semibold text-indigo-900">{rec.pharmacyName}</span>
                     </div>
-                    
+
                     <span className="text-sm font-medium text-gray-600">{rec.concentration}mg/ml Concentration</span>
                   </div>
                 </div>
@@ -497,26 +1025,6 @@ ${customTitration.map(w => `Week ${w.week}: ${w.dose}mg (${(w.dose / recommendat
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => copyToClipboard(rec)}
-                    className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all ${
-                      selectedRecommendation === rec && copied
-                        ? 'bg-green-600 text-white'
-                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                    }`}
-                  >
-                    {selectedRecommendation === rec && copied ? (
-                      <>
-                        <Check className="w-5 h-5" />
-                        Copied to Clipboard!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-5 h-5" />
-                        Copy Order Summary for Salesforce
-                      </>
-                    )}
-                  </button>
                 </div>
               </div>
             ))}
@@ -530,6 +1038,67 @@ ${customTitration.map(w => `Week ${w.week}: ${w.dose}mg (${(w.dose / recommendat
               <h3 className="font-semibold text-gray-800">No Products Available</h3>
               <p className="text-sm text-gray-600 mt-1">
                 No pharmacies can ship Tirzepatide to {US_STATES.find(s => s.code === selectedState)?.name}. Please select a different state.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedRecommendation && directiveConcentration && (
+        <div className="mb-6 p-6 bg-gray-50 rounded-xl">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm">4</span>
+            <h2 className="text-lg font-semibold text-gray-800">Medical Directive</h2>
+          </div>
+
+          <div className="bg-white rounded-xl border-2 border-indigo-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-semibold text-gray-800">Patient Injection Instructions</h3>
+                <span className="text-sm text-indigo-600 bg-indigo-50 px-2 py-1 rounded">{directiveConcentration}mg/ml</span>
+              </div>
+              <button
+                onClick={copyMedicalDirective}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                  directiveCopied
+                    ? 'bg-green-600 text-white'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                }`}
+              >
+                {directiveCopied ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4" />
+                    Copy Instructions
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {getMedicalDirective(directiveConcentration).map((stage, idx) => (
+                <div key={idx} className="p-4 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg border border-indigo-200">
+                  <div className="text-sm font-bold text-indigo-700 mb-1">{stage.label}</div>
+                  <div className="text-xs text-gray-500 mb-2">Weeks {stage.weeks}</div>
+                  <div className="space-y-1">
+                    <div className="text-xl font-bold text-gray-900">
+                      {stage.volume}ml <span className="text-lg text-gray-600">({stage.units} units)</span>
+                    </div>
+                    <div className="text-sm text-gray-500">{stage.dose}mg dose</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-800">
+                <strong>Instructions:</strong> Inject once weekly subcutaneously. 1ml = 100 units on an insulin syringe.
+                Rotate injection sites (abdomen, thigh, upper arm).
               </p>
             </div>
           </div>
