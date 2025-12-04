@@ -716,6 +716,17 @@ const MedicationCalculator = () => {
                       Tirzepatide (Injectable)
                     </button>
                     <button
+                      onClick={() => setSelectedMedication('tesamorelin')}
+                      className={`flex items-center gap-2 px-6 py-3 font-semibold transition-all border-b-2 ${
+                        selectedMedication === 'tesamorelin'
+                          ? 'border-indigo-600 text-indigo-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      <Syringe className="w-5 h-5" />
+                      Tesamorelin (Injectable)
+                    </button>
+                    <button
                       onClick={() => setSelectedMedication('testosterone')}
                       className={`flex items-center gap-2 px-6 py-3 font-semibold transition-all border-b-2 ${
                         selectedMedication === 'testosterone'
@@ -730,6 +741,8 @@ const MedicationCalculator = () => {
 
                   {selectedMedication === 'tirzepatide' ? (
                     <TirzepatideCalculator selectedState={selectedState} />
+                  ) : selectedMedication === 'tesamorelin' ? (
+                    <TesamorelinCalculator selectedState={selectedState} />
                   ) : (
                     <TestosteroneCalculator selectedState={selectedState} />
                   )}
@@ -1280,6 +1293,344 @@ ${customTitration.map(w => `Week ${w.week}: ${w.dose}mg (${(w.dose / recommendat
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TesamorelinCalculator = ({ selectedState }) => {
+  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState([]);
+  const [shippingRestrictions, setShippingRestrictions] = useState([]);
+  const [duration, setDuration] = useState(12);
+  const [dailyDose, setDailyDose] = useState(1.0);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true);
+        const [productsRes, restrictionsRes] = await Promise.all([
+          supabase
+            .from('products')
+            .select('*, pharmacies(name)')
+            .eq('active', true)
+            .ilike('name', '%tesamorelin%'),
+          supabase
+            .from('shipping_restrictions')
+            .select('*')
+        ]);
+
+        if (productsRes.error) throw productsRes.error;
+        if (restrictionsRes.error) throw restrictionsRes.error;
+
+        setProducts(productsRes.data || []);
+        setShippingRestrictions(restrictionsRes.data || []);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, []);
+
+  const canShipToState = (pharmacyId, state) => {
+    const pharmacyRestrictions = shippingRestrictions.filter(r => r.pharmacy_id === pharmacyId);
+
+    if (pharmacyRestrictions.length === 0) return true;
+
+    const stateRestriction = pharmacyRestrictions.find(r => r.state_code === state);
+    const hasPositiveRestrictions = pharmacyRestrictions.some(r => r.can_ship === true);
+
+    if (stateRestriction) return stateRestriction.can_ship;
+    if (hasPositiveRestrictions) return false;
+    return true;
+  };
+
+  // 6 days per week (Mon-Sat)
+  const daysPerWeek = 6;
+  const totalWeeks = duration;
+  const totalDays = totalWeeks * daysPerWeek;
+  const totalDose = dailyDose * totalDays;
+
+  const recommendations = useMemo(() => {
+    if (!products.length) return [];
+
+    const availableProducts = products.filter(p =>
+      canShipToState(p.pharmacy_id, selectedState)
+    );
+
+    return availableProducts.map(product => {
+      const concentration = product.concentration; // mg/ml
+      const vialVolume = product.volume; // ml
+      const vialTotalMg = concentration * vialVolume;
+
+      const volumeNeeded = totalDose / concentration;
+      const vialsNeeded = Math.ceil(volumeNeeded / vialVolume);
+      const totalVolume = vialsNeeded * vialVolume;
+      const overage = totalVolume - volumeNeeded;
+      const overageMg = overage * concentration;
+
+      const totalCost = vialsNeeded * product.cost;
+      const totalRetail = vialsNeeded * product.retail_price;
+      const profit = totalRetail - totalCost;
+      const profitMargin = (profit / totalRetail) * 100;
+
+      // Cost per mg calculations
+      const costPerMg = product.cost / vialTotalMg;
+      const retailPerMg = product.retail_price / vialTotalMg;
+
+      return {
+        product,
+        pharmacyName: product.pharmacies.name,
+        concentration,
+        vialVolume,
+        vialTotalMg,
+        volumeNeeded,
+        vialsNeeded,
+        totalVolume,
+        overage,
+        overageMg,
+        totalCost,
+        totalRetail,
+        profit,
+        profitMargin,
+        costPerMg,
+        retailPerMg
+      };
+    }).sort((a, b) => a.overage - b.overage);
+  }, [products, totalDose, selectedState]);
+
+  const copyToClipboard = (rec) => {
+    const stateName = US_STATES.find(s => s.code === selectedState)?.name;
+    const volumePerDose = dailyDose / rec.concentration;
+    const unitsPerDose = volumePerDose * 100;
+
+    const summary = `
+TESAMORELIN ORDER SUMMARY
+=========================
+
+Patient State: ${stateName}
+Duration: ${duration} weeks
+Dosing: ${dailyDose}mg daily, Monday through Saturday
+Total Dose Needed: ${totalDose.toFixed(1)}mg
+
+PHARMACY: ${rec.pharmacyName}
+Product: ${rec.product.name}
+Concentration: ${rec.concentration}mg/ml
+
+VIALS REQUIRED: ${rec.vialsNeeded}
+Volume Needed: ${rec.volumeNeeded.toFixed(2)}ml
+Volume Provided: ${rec.totalVolume.toFixed(2)}ml
+Overage: ${rec.overage.toFixed(2)}ml (${rec.overageMg.toFixed(1)}mg)
+
+PRICING:
+Cost: $${rec.totalCost.toFixed(2)} ($${rec.costPerMg.toFixed(2)}/mg)
+Retail: $${rec.totalRetail.toFixed(2)} ($${rec.retailPerMg.toFixed(2)}/mg)
+Gross Margin: ${rec.profitMargin.toFixed(1)}%
+
+INJECTION INSTRUCTIONS:
+Dose: ${dailyDose}mg daily
+Volume per injection: ${volumePerDose.toFixed(2)}ml (${unitsPerDose.toFixed(0)} units)
+Schedule: Monday through Saturday (6 days/week)
+Route: Subcutaneous injection
+    `.trim();
+
+    navigator.clipboard.writeText(summary);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        <span className="ml-3 text-gray-600">Loading products...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-6 p-6 bg-gray-50 rounded-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm">1</span>
+          <h2 className="text-lg font-semibold text-gray-800">Prescription Duration</h2>
+        </div>
+        <select
+          value={duration}
+          onChange={(e) => setDuration(parseInt(e.target.value))}
+          className="w-full p-4 text-lg border-2 border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+        >
+          {[4, 8, 12, 16, 20, 24].map(weeks => (
+            <option key={weeks} value={weeks}>{weeks} weeks ({(weeks / 4).toFixed(1)} months)</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mb-6 p-6 bg-gray-50 rounded-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm">2</span>
+          <h2 className="text-lg font-semibold text-gray-800">Daily Dose</h2>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[0.8, 1.0, 1.5, 2.0].map(dose => (
+            <button
+              key={dose}
+              onClick={() => setDailyDose(dose)}
+              className={`px-4 py-3 rounded-lg font-medium transition-all ${
+                dailyDose === dose
+                  ? 'bg-indigo-600 text-white shadow-lg scale-105'
+                  : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-indigo-300'
+              }`}
+            >
+              {dose}mg
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+          <p className="text-sm text-indigo-800">
+            <strong>Dosing Protocol:</strong> {dailyDose}mg subcutaneously, Monday through Saturday (6 days/week)
+          </p>
+        </div>
+      </div>
+
+      <div className="mb-6 p-4 bg-indigo-600 text-white rounded-lg">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold">Total Dose Needed:</span>
+          <span className="text-2xl font-bold">{totalDose.toFixed(1)}mg over {duration} weeks ({totalDays} injections)</span>
+        </div>
+      </div>
+
+      {recommendations.length > 0 ? (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm">3</span>
+            <h2 className="text-lg font-semibold text-gray-800">Product Recommendation</h2>
+          </div>
+
+          <div className="space-y-4">
+            {recommendations.map((rec, idx) => {
+              const volumePerDose = dailyDose / rec.concentration;
+              const unitsPerDose = volumePerDose * 100;
+
+              return (
+                <div
+                  key={idx}
+                  className={`bg-white rounded-xl border-2 p-6 transition-all ${
+                    idx === 0
+                      ? 'border-green-300 shadow-md'
+                      : 'border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3 flex-1 flex-wrap">
+                      {idx === 0 && (
+                        <div className="flex items-center gap-2 px-3 py-1 bg-green-100 border border-green-300 rounded-full">
+                          <Award className="w-4 h-4 text-green-700" />
+                          <span className="text-xs font-semibold text-green-700 uppercase">Recommended</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 px-3 py-1 bg-indigo-100 border border-indigo-300 rounded-full">
+                        <Building2 className="w-4 h-4 text-indigo-700" />
+                        <span className="text-sm font-semibold text-indigo-900">{rec.pharmacyName}</span>
+                      </div>
+                      <span className="text-sm font-medium text-gray-600">{rec.product.name}</span>
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard(rec)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                        copied
+                          ? 'bg-green-600 text-white'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      }`}
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          Copy Summary
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-500 uppercase">Vials Needed</div>
+                      <div className="text-2xl font-bold text-gray-900">{rec.vialsNeeded}</div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-500 uppercase">Volume per Dose</div>
+                      <div className="text-2xl font-bold text-gray-900">{volumePerDose.toFixed(2)}ml</div>
+                      <div className="text-xs text-gray-600">{unitsPerDose.toFixed(0)} units</div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-500 uppercase">Total Retail</div>
+                      <div className="text-2xl font-bold text-gray-900">${rec.totalRetail.toFixed(2)}</div>
+                    </div>
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <div className="text-xs text-gray-500 uppercase">Gross Margin</div>
+                      <div className="text-2xl font-bold text-indigo-600">{rec.profitMargin.toFixed(1)}%</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div className="space-y-1">
+                      <div className="font-semibold text-gray-600 uppercase tracking-wide">Volume Details:</div>
+                      <div className="text-gray-700">
+                        <div>Volume Needed: <span className="font-medium">{rec.volumeNeeded.toFixed(2)}ml</span></div>
+                        <div>Volume Dispensed: <span className="font-medium">{rec.totalVolume.toFixed(2)}ml</span></div>
+                        <div>Overage: <span className={`font-medium ${rec.overage < 1 ? 'text-green-600' : 'text-orange-600'}`}>{rec.overage.toFixed(2)}ml ({rec.overageMg.toFixed(1)}mg)</span></div>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="font-semibold text-gray-600 uppercase tracking-wide">Pricing:</div>
+                      <div className="text-gray-700">
+                        <div>Cost: <span className="font-medium">${rec.totalCost.toFixed(2)}</span></div>
+                        <div>Retail: <span className="font-medium">${rec.totalRetail.toFixed(2)}</span></div>
+                        <div>Profit: <span className="font-medium text-green-600">${rec.profit.toFixed(2)}</span></div>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="font-semibold text-gray-600 uppercase tracking-wide">Cost per mg:</div>
+                      <div className="text-gray-700">
+                        <div>Cost/mg: <span className="font-medium">${rec.costPerMg.toFixed(2)}</span></div>
+                        <div>Retail/mg: <span className="font-medium">${rec.retailPerMg.toFixed(2)}</span></div>
+                        <div>Total mg: <span className="font-medium">{rec.vialTotalMg}mg/vial</span></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-sm text-amber-800">
+                      <strong>Instructions:</strong> Inject {volumePerDose.toFixed(2)}ml ({unitsPerDose.toFixed(0)} units) subcutaneously once daily, Monday through Saturday.
+                      1ml = 100 units on an insulin syringe.
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="p-8 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-6 h-6 text-yellow-600" />
+            <div>
+              <h3 className="font-semibold text-gray-800">No Products Available</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                No pharmacies can ship Tesamorelin to {US_STATES.find(s => s.code === selectedState)?.name}. Please select a different state.
+              </p>
+            </div>
           </div>
         </div>
       )}

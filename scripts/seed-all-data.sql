@@ -186,6 +186,15 @@ INSERT INTO products (pharmacy_id, name, concentration, volume, cost, retail_pri
 
 -- SouthLake and CRE8 have no Tirzepatide products
 
+-- Brooksville Tesamorelin Products
+INSERT INTO products (pharmacy_id, name, concentration, volume, cost, retail_price, active) VALUES
+('d4e5f6a7-b8c9-4012-d345-6789abcdef01', 'Tesamorelin 8mg/ml 3ml', 8, 3, 212.41, 750, true);
+
+-- Wellvi/Reviv Tesamorelin Products
+INSERT INTO products (pharmacy_id, name, concentration, volume, cost, retail_price, active) VALUES
+('a1b2c3d4-e5f6-4789-a012-3456789abcde', 'Tesamorelin 2mg/ml 10ml', 2, 10, 90, 350, true),
+('a1b2c3d4-e5f6-4789-a012-3456789abcde', 'Tesamorelin 3mg/ml 5ml', 3, 5, 75, 289, true);
+
 -- =============================================
 -- STEP 5: Verify the data
 -- =============================================
