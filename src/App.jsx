@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Calculator, AlertCircle, Loader2, Award, Package, Check, Copy, Building2, Syringe, Droplet, MapPin, FileText, Truck, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Calculator, AlertCircle, Loader2, Award, Package, Check, Copy, Building2, Syringe, Droplet, MapPin, FileText, Truck, CheckCircle, XCircle, AlertTriangle, Search, X } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -27,17 +27,166 @@ const US_STATES = [
   { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' }
 ];
 
-// Medication types for filtering (without "All" option - handled separately)
-const MEDICATION_TYPES = [
-  { value: 'tirzepatide', label: 'Tirzepatide' },
-  { value: 'semaglutide', label: 'Semaglutide' },
-  { value: 'testosterone', label: 'Testosterone' },
-  { value: 'thyroid', label: 'Thyroid' },
-  { value: 'naltrexone', label: 'Naltrexone' },
-  { value: 'sermorelin', label: 'Sermorelin' },
-  { value: 'sildenafil', label: 'Sildenafil' },
-  { value: 'tadalafil', label: 'Tadalafil' },
-];
+// Multi-select search component for medications
+const MedicationMultiSelect = ({ products, selectedMedications, setSelectedMedications }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const inputRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  // Extract unique medication names from products
+  const availableMedications = useMemo(() => {
+    const medicationSet = new Set();
+    products.forEach(product => {
+      // Extract the base medication name (first word or words before concentration)
+      const name = product.name;
+      // Try to extract medication name - usually the first part before numbers
+      const match = name.match(/^([A-Za-z\s\-\/]+?)(?:\s+\d|$)/);
+      if (match) {
+        medicationSet.add(match[1].trim());
+      } else {
+        // Fallback: use the whole name
+        medicationSet.add(name);
+      }
+    });
+    return Array.from(medicationSet).sort();
+  }, [products]);
+
+  // Filter medications based on search term
+  const filteredMedications = useMemo(() => {
+    if (!searchTerm) return availableMedications;
+    return availableMedications.filter(med =>
+      med.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [availableMedications, searchTerm]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const addMedication = (medication) => {
+    if (!selectedMedications.includes(medication)) {
+      setSelectedMedications([...selectedMedications, medication]);
+    }
+    setSearchTerm('');
+    setIsOpen(false);
+    inputRef.current?.focus();
+  };
+
+  const removeMedication = (medication) => {
+    setSelectedMedications(selectedMedications.filter(m => m !== medication));
+  };
+
+  const clearAll = () => {
+    setSelectedMedications([]);
+    setSearchTerm('');
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <label className="block text-sm font-semibold text-gray-700 mb-2">
+        Filter by Medications
+        {selectedMedications.length > 0 && (
+          <span className="ml-2 text-xs font-normal text-indigo-600">
+            ({selectedMedications.length} selected)
+          </span>
+        )}
+      </label>
+
+      {/* Selected medications as tags */}
+      {selectedMedications.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {selectedMedications.map(med => (
+            <span
+              key={med}
+              className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm font-medium"
+            >
+              {med}
+              <button
+                onClick={() => removeMedication(med)}
+                className="hover:bg-indigo-200 rounded-full p-0.5 transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          <button
+            onClick={clearAll}
+            className="text-xs text-gray-500 hover:text-red-600 px-2 py-1 transition-colors"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
+      {/* Search input */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          placeholder="Search medications..."
+          className="w-full pl-10 pr-4 py-3 border-2 border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+        />
+      </div>
+
+      {/* Dropdown */}
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-white border-2 border-indigo-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+          {filteredMedications.length === 0 ? (
+            <div className="px-4 py-3 text-gray-500 text-sm">
+              {searchTerm ? 'No medications found' : 'No medications available'}
+            </div>
+          ) : (
+            <>
+              {searchTerm === '' && (
+                <div className="px-4 py-2 text-xs text-gray-500 bg-gray-50 border-b">
+                  {availableMedications.length} medications available - type to search
+                </div>
+              )}
+              {filteredMedications.slice(0, 50).map(medication => {
+                const isSelected = selectedMedications.includes(medication);
+                return (
+                  <button
+                    key={medication}
+                    onClick={() => addMedication(medication)}
+                    disabled={isSelected}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between ${
+                      isSelected
+                        ? 'bg-indigo-50 text-indigo-400 cursor-not-allowed'
+                        : 'hover:bg-indigo-50 text-gray-700'
+                    }`}
+                  >
+                    <span>{medication}</span>
+                    {isSelected && <Check className="w-4 h-4 text-indigo-500" />}
+                  </button>
+                );
+              })}
+              {filteredMedications.length > 50 && (
+                <div className="px-4 py-2 text-xs text-gray-500 bg-gray-50 border-t">
+                  Showing 50 of {filteredMedications.length} results - refine your search
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 // Ship To State Lookup Component
 const ShipToStateLookup = () => {
@@ -49,17 +198,6 @@ const ShipToStateLookup = () => {
   const [selectedMedications, setSelectedMedications] = useState([]);
   const [expandedPharmacy, setExpandedPharmacy] = useState(null);
 
-  const toggleMedication = (medValue) => {
-    setSelectedMedications(prev =>
-      prev.includes(medValue)
-        ? prev.filter(m => m !== medValue)
-        : [...prev, medValue]
-    );
-  };
-
-  const clearMedications = () => {
-    setSelectedMedications([]);
-  };
 
   useEffect(() => {
     async function fetchData() {
@@ -180,15 +318,15 @@ const ShipToStateLookup = () => {
         <p className="text-gray-600">Check which pharmacies can ship to a specific state</p>
       </div>
 
-      <div className="max-w-3xl mx-auto mb-8">
+      <div className="max-w-4xl mx-auto mb-8">
         <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border-2 border-indigo-200 p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Select State</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Select State</label>
               <select
                 value={selectedState}
                 onChange={(e) => setSelectedState(e.target.value)}
-                className="w-full p-4 text-lg border-2 border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                className="w-full p-3 text-lg border-2 border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
               >
                 <option value="">Select a state...</option>
                 {US_STATES.map(state => (
@@ -196,45 +334,14 @@ const ShipToStateLookup = () => {
                 ))}
               </select>
             </div>
-            <div className="md:col-span-1">
-              <div className="flex items-center justify-between mb-3">
-                <label className="block text-sm font-semibold text-gray-700">Filter by Medications</label>
-                {selectedMedications.length > 0 && (
-                  <button
-                    onClick={clearMedications}
-                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                  >
-                    Clear All
-                  </button>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {MEDICATION_TYPES.map(med => (
-                  <label
-                    key={med.value}
-                    className={`flex items-center gap-2 p-2 rounded-lg border-2 cursor-pointer transition-all ${
-                      selectedMedications.includes(med.value)
-                        ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-200 bg-white hover:border-indigo-300'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedMedications.includes(med.value)}
-                      onChange={() => toggleMedication(med.value)}
-                      className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm font-medium text-gray-700">{med.label}</span>
-                  </label>
-                ))}
-              </div>
+            <div>
+              <MedicationMultiSelect
+                products={products}
+                selectedMedications={selectedMedications}
+                setSelectedMedications={setSelectedMedications}
+              />
             </div>
           </div>
-          {selectedMedications.length > 0 && (
-            <div className="mt-3 text-sm text-indigo-700 bg-indigo-100 px-3 py-2 rounded-lg">
-              Showing pharmacies that carry: <strong>{selectedMedications.map(m => MEDICATION_TYPES.find(t => t.value === m)?.label).join(', ')}</strong>
-            </div>
-          )}
         </div>
       </div>
 
@@ -273,7 +380,7 @@ const ShipToStateLookup = () => {
                 <h3 className="font-semibold text-green-800 flex items-center gap-2 flex-wrap">
                   <CheckCircle className="w-5 h-5" />
                   Can Ship to {US_STATES.find(s => s.code === selectedState)?.name}
-                  {selectedMedications.length > 0 && <span className="text-sm font-normal">({selectedMedications.map(m => MEDICATION_TYPES.find(t => t.value === m)?.label).join(', ')})</span>}
+                  {selectedMedications.length > 0 && <span className="text-sm font-normal">({selectedMedications.join(', ')})</span>}
                 </h3>
               </div>
               <div className="p-4">
@@ -328,7 +435,7 @@ const ShipToStateLookup = () => {
                 <h3 className="font-semibold text-yellow-800 flex items-center gap-2 flex-wrap">
                   <AlertTriangle className="w-5 h-5" />
                   Some Limitations
-                  {selectedMedications.length > 0 && <span className="text-sm font-normal">({selectedMedications.map(m => MEDICATION_TYPES.find(t => t.value === m)?.label).join(', ')})</span>}
+                  {selectedMedications.length > 0 && <span className="text-sm font-normal">({selectedMedications.join(', ')})</span>}
                 </h3>
               </div>
               <div className="p-4">
@@ -388,7 +495,7 @@ const ShipToStateLookup = () => {
                 <h3 className="font-semibold text-red-800 flex items-center gap-2 flex-wrap">
                   <XCircle className="w-5 h-5" />
                   Cannot Ship to {US_STATES.find(s => s.code === selectedState)?.name}
-                  {selectedMedications.length > 0 && <span className="text-sm font-normal">({selectedMedications.map(m => MEDICATION_TYPES.find(t => t.value === m)?.label).join(', ')})</span>}
+                  {selectedMedications.length > 0 && <span className="text-sm font-normal">({selectedMedications.join(', ')})</span>}
                 </h3>
               </div>
               <div className="p-4">
@@ -442,7 +549,7 @@ const ShipToStateLookup = () => {
               <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
                 <h3 className="font-semibold text-gray-700 flex items-center gap-2 flex-wrap">
                   <Package className="w-5 h-5" />
-                  No Products for: {selectedMedications.map(m => MEDICATION_TYPES.find(t => t.value === m)?.label).join(', ')}
+                  No Products for: {selectedMedications.join(', ')}
                 </h3>
               </div>
               <div className="p-4">
