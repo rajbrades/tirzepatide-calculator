@@ -27,9 +27,8 @@ const US_STATES = [
   { code: 'WI', name: 'Wisconsin' }, { code: 'WY', name: 'Wyoming' }
 ];
 
-// Medication types for filtering
+// Medication types for filtering (without "All" option - handled separately)
 const MEDICATION_TYPES = [
-  { value: '', label: 'All Medications' },
   { value: 'tirzepatide', label: 'Tirzepatide' },
   { value: 'semaglutide', label: 'Semaglutide' },
   { value: 'testosterone', label: 'Testosterone' },
@@ -47,8 +46,20 @@ const ShipToStateLookup = () => {
   const [products, setProducts] = useState([]);
   const [shippingRestrictions, setShippingRestrictions] = useState([]);
   const [selectedState, setSelectedState] = useState('');
-  const [selectedMedication, setSelectedMedication] = useState('');
+  const [selectedMedications, setSelectedMedications] = useState([]);
   const [expandedPharmacy, setExpandedPharmacy] = useState(null);
+
+  const toggleMedication = (medValue) => {
+    setSelectedMedications(prev =>
+      prev.includes(medValue)
+        ? prev.filter(m => m !== medValue)
+        : [...prev, medValue]
+    );
+  };
+
+  const clearMedications = () => {
+    setSelectedMedications([]);
+  };
 
   useEffect(() => {
     async function fetchData() {
@@ -76,23 +87,23 @@ const ShipToStateLookup = () => {
     fetchData();
   }, []);
 
-  // Get products for a pharmacy, optionally filtered by medication type
-  const getPharmacyProducts = (pharmacyId, medicationType = '') => {
+  // Get products for a pharmacy, optionally filtered by medication types (array)
+  const getPharmacyProducts = (pharmacyId, medicationTypes = []) => {
     let pharmacyProducts = products.filter(p => p.pharmacy_id === pharmacyId);
 
-    if (medicationType) {
+    if (medicationTypes.length > 0) {
       pharmacyProducts = pharmacyProducts.filter(p =>
-        p.name.toLowerCase().includes(medicationType.toLowerCase())
+        medicationTypes.some(med => p.name.toLowerCase().includes(med.toLowerCase()))
       );
     }
 
     return pharmacyProducts;
   };
 
-  // Check if pharmacy has products matching the medication filter
-  const pharmacyHasMedication = (pharmacyId, medicationType) => {
-    if (!medicationType) return true;
-    return getPharmacyProducts(pharmacyId, medicationType).length > 0;
+  // Check if pharmacy has products matching any of the medication filters
+  const pharmacyHasMedication = (pharmacyId, medicationTypes) => {
+    if (!medicationTypes || medicationTypes.length === 0) return true;
+    return getPharmacyProducts(pharmacyId, medicationTypes).length > 0;
   };
 
   const getPharmacyStatus = (pharmacyId, stateCode) => {
@@ -110,7 +121,7 @@ const ShipToStateLookup = () => {
     return { canShip: restriction.can_ship, notes: restriction.notes };
   };
 
-  const getPharmaciesForState = (stateCode, medicationType = '') => {
+  const getPharmaciesForState = (stateCode, medicationTypes = []) => {
     if (!stateCode) return { canShip: [], limited: [], cannotShip: [], noProducts: [] };
 
     const canShip = [];
@@ -120,8 +131,8 @@ const ShipToStateLookup = () => {
 
     pharmacies.forEach(pharmacy => {
       const status = getPharmacyStatus(pharmacy.id, stateCode);
-      const hasMedication = pharmacyHasMedication(pharmacy.id, medicationType);
-      const pharmacyProducts = getPharmacyProducts(pharmacy.id, medicationType);
+      const hasMedication = pharmacyHasMedication(pharmacy.id, medicationTypes);
+      const pharmacyProducts = getPharmacyProducts(pharmacy.id, medicationTypes);
 
       const pharmacyData = {
         ...pharmacy,
@@ -130,8 +141,8 @@ const ShipToStateLookup = () => {
         productCount: pharmacyProducts.length
       };
 
-      // If filtering by medication and pharmacy doesn't have it
-      if (medicationType && !hasMedication) {
+      // If filtering by medications and pharmacy doesn't have any of them
+      if (medicationTypes.length > 0 && !hasMedication) {
         noProducts.push(pharmacyData);
       } else if (status.canShip === false) {
         cannotShip.push(pharmacyData);
@@ -147,8 +158,8 @@ const ShipToStateLookup = () => {
 
   const pharmacyStatusByState = useMemo(() => {
     if (!selectedState) return null;
-    return getPharmaciesForState(selectedState, selectedMedication);
-  }, [selectedState, selectedMedication, pharmacies, shippingRestrictions, products]);
+    return getPharmaciesForState(selectedState, selectedMedications);
+  }, [selectedState, selectedMedications, pharmacies, shippingRestrictions, products]);
 
   if (loading) {
     return (
@@ -185,22 +196,43 @@ const ShipToStateLookup = () => {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Filter by Medication (Optional)</label>
-              <select
-                value={selectedMedication}
-                onChange={(e) => setSelectedMedication(e.target.value)}
-                className="w-full p-4 text-lg border-2 border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-              >
+            <div className="md:col-span-1">
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-sm font-semibold text-gray-700">Filter by Medications</label>
+                {selectedMedications.length > 0 && (
+                  <button
+                    onClick={clearMedications}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 {MEDICATION_TYPES.map(med => (
-                  <option key={med.value} value={med.value}>{med.label}</option>
+                  <label
+                    key={med.value}
+                    className={`flex items-center gap-2 p-2 rounded-lg border-2 cursor-pointer transition-all ${
+                      selectedMedications.includes(med.value)
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-gray-200 bg-white hover:border-indigo-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedMedications.includes(med.value)}
+                      onChange={() => toggleMedication(med.value)}
+                      className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">{med.label}</span>
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
           </div>
-          {selectedMedication && (
+          {selectedMedications.length > 0 && (
             <div className="mt-3 text-sm text-indigo-700 bg-indigo-100 px-3 py-2 rounded-lg">
-              Showing only pharmacies that carry <strong>{MEDICATION_TYPES.find(m => m.value === selectedMedication)?.label}</strong>
+              Showing pharmacies that carry: <strong>{selectedMedications.map(m => MEDICATION_TYPES.find(t => t.value === m)?.label).join(', ')}</strong>
             </div>
           )}
         </div>
@@ -209,7 +241,7 @@ const ShipToStateLookup = () => {
       {selectedState && pharmacyStatusByState && (
         <div className="space-y-6">
           {/* Summary Cards */}
-          <div className={`grid gap-4 mb-6 ${selectedMedication ? 'grid-cols-4' : 'grid-cols-3'}`}>
+          <div className={`grid gap-4 mb-6 ${selectedMedications.length > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-center">
               <CheckCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
               <div className="text-3xl font-bold text-green-700">{pharmacyStatusByState.canShip.length}</div>
@@ -225,7 +257,7 @@ const ShipToStateLookup = () => {
               <div className="text-3xl font-bold text-red-700">{pharmacyStatusByState.cannotShip.length}</div>
               <div className="text-sm text-red-600 font-medium">Cannot Ship</div>
             </div>
-            {selectedMedication && (
+            {selectedMedications.length > 0 && (
               <div className="bg-gray-50 border-2 border-gray-200 rounded-xl p-4 text-center">
                 <Package className="w-8 h-8 text-gray-500 mx-auto mb-2" />
                 <div className="text-3xl font-bold text-gray-600">{pharmacyStatusByState.noProducts.length}</div>
@@ -238,10 +270,10 @@ const ShipToStateLookup = () => {
           {pharmacyStatusByState.canShip.length > 0 && (
             <div className="bg-white rounded-xl border-2 border-green-200 overflow-hidden">
               <div className="bg-green-50 px-6 py-3 border-b border-green-200">
-                <h3 className="font-semibold text-green-800 flex items-center gap-2">
+                <h3 className="font-semibold text-green-800 flex items-center gap-2 flex-wrap">
                   <CheckCircle className="w-5 h-5" />
                   Can Ship to {US_STATES.find(s => s.code === selectedState)?.name}
-                  {selectedMedication && <span className="text-sm font-normal">({MEDICATION_TYPES.find(m => m.value === selectedMedication)?.label})</span>}
+                  {selectedMedications.length > 0 && <span className="text-sm font-normal">({selectedMedications.map(m => MEDICATION_TYPES.find(t => t.value === m)?.label).join(', ')})</span>}
                 </h3>
               </div>
               <div className="p-4">
@@ -293,10 +325,10 @@ const ShipToStateLookup = () => {
           {pharmacyStatusByState.limited.length > 0 && (
             <div className="bg-white rounded-xl border-2 border-yellow-200 overflow-hidden">
               <div className="bg-yellow-50 px-6 py-3 border-b border-yellow-200">
-                <h3 className="font-semibold text-yellow-800 flex items-center gap-2">
+                <h3 className="font-semibold text-yellow-800 flex items-center gap-2 flex-wrap">
                   <AlertTriangle className="w-5 h-5" />
                   Some Limitations
-                  {selectedMedication && <span className="text-sm font-normal">({MEDICATION_TYPES.find(m => m.value === selectedMedication)?.label})</span>}
+                  {selectedMedications.length > 0 && <span className="text-sm font-normal">({selectedMedications.map(m => MEDICATION_TYPES.find(t => t.value === m)?.label).join(', ')})</span>}
                 </h3>
               </div>
               <div className="p-4">
@@ -353,10 +385,10 @@ const ShipToStateLookup = () => {
           {pharmacyStatusByState.cannotShip.length > 0 && (
             <div className="bg-white rounded-xl border-2 border-red-200 overflow-hidden">
               <div className="bg-red-50 px-6 py-3 border-b border-red-200">
-                <h3 className="font-semibold text-red-800 flex items-center gap-2">
+                <h3 className="font-semibold text-red-800 flex items-center gap-2 flex-wrap">
                   <XCircle className="w-5 h-5" />
                   Cannot Ship to {US_STATES.find(s => s.code === selectedState)?.name}
-                  {selectedMedication && <span className="text-sm font-normal">({MEDICATION_TYPES.find(m => m.value === selectedMedication)?.label})</span>}
+                  {selectedMedications.length > 0 && <span className="text-sm font-normal">({selectedMedications.map(m => MEDICATION_TYPES.find(t => t.value === m)?.label).join(', ')})</span>}
                 </h3>
               </div>
               <div className="p-4">
@@ -405,12 +437,12 @@ const ShipToStateLookup = () => {
           )}
 
           {/* No Products (when filtering by medication) */}
-          {selectedMedication && pharmacyStatusByState.noProducts.length > 0 && (
+          {selectedMedications.length > 0 && pharmacyStatusByState.noProducts.length > 0 && (
             <div className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden">
               <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
-                <h3 className="font-semibold text-gray-700 flex items-center gap-2">
+                <h3 className="font-semibold text-gray-700 flex items-center gap-2 flex-wrap">
                   <Package className="w-5 h-5" />
-                  No {MEDICATION_TYPES.find(m => m.value === selectedMedication)?.label} Products
+                  No Products for: {selectedMedications.map(m => MEDICATION_TYPES.find(t => t.value === m)?.label).join(', ')}
                 </h3>
               </div>
               <div className="p-4">
