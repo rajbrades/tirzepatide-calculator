@@ -1466,7 +1466,7 @@ Route: Subcutaneous injection
           onChange={(e) => setDuration(parseInt(e.target.value))}
           className="w-full p-4 text-lg border-2 border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
         >
-          {[4, 8, 12, 16, 20, 24].map(weeks => (
+          {[4, 6, 8, 10, 12].map(weeks => (
             <option key={weeks} value={weeks}>{weeks} weeks ({(weeks / 4).toFixed(1)} months)</option>
           ))}
         </select>
@@ -1477,12 +1477,12 @@ Route: Subcutaneous injection
           <span className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center font-bold text-sm">2</span>
           <h2 className="text-lg font-semibold text-gray-800">Daily Dose</h2>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[0.8, 1.0, 1.5, 2.0].map(dose => (
+        <div className="grid grid-cols-3 sm:grid-cols-7 gap-2">
+          {[0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0].map(dose => (
             <button
               key={dose}
               onClick={() => setDailyDose(dose)}
-              className={`px-4 py-3 rounded-lg font-medium transition-all ${
+              className={`px-3 py-3 rounded-lg font-medium transition-all ${
                 dailyDose === dose
                   ? 'bg-indigo-600 text-white shadow-lg scale-105'
                   : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-indigo-300'
