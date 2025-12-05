@@ -83,6 +83,30 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const signInWithEmail = async (email) => {
+    setError(null);
+
+    // Validate domain before sending magic link
+    if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) {
+      setError(`Access restricted to @${ALLOWED_DOMAIN} emails only.`);
+      return { success: false };
+    }
+
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+      return { success: true };
+    } catch (err) {
+      setError(err.message);
+      return { success: false };
+    }
+  };
+
   const signOut = async () => {
     try {
       await supabase.auth.signOut();
@@ -93,7 +117,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, signInWithMicrosoft, signOut }}>
+    <AuthContext.Provider value={{ user, loading, error, signInWithMicrosoft, signInWithEmail, signOut }}>
       {children}
     </AuthContext.Provider>
   );
