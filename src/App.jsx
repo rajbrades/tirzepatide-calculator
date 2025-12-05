@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Calculator, AlertCircle, Loader2, Award, Package, Check, Copy, Building2, Syringe, Droplet, MapPin, FileText, Truck, CheckCircle, XCircle, AlertTriangle, Search, X } from 'lucide-react';
+import { Calculator, AlertCircle, Loader2, Award, Package, Check, Copy, Building2, Syringe, Droplet, MapPin, FileText, Truck, CheckCircle, XCircle, AlertTriangle, Search, X, LogOut, User } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
+import { useAuth } from './AuthContext';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -718,6 +719,7 @@ const MedicationCalculator = () => {
   const [selectedState, setSelectedState] = useState('');
   const [selectedMedication, setSelectedMedication] = useState('tirzepatide');
   const [activeTab, setActiveTab] = useState('calculators'); // 'calculators' or 'shipping'
+  const { user, signOut } = useAuth();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-100 p-4 sm:p-6 lg:p-8">
@@ -729,19 +731,36 @@ const MedicationCalculator = () => {
               <h1 className="text-3xl font-bold text-gray-800">10X Medication Calculator</h1>
             </div>
 
-            {activeTab === 'calculators' && selectedState && (
-              <button
-                onClick={() => setSelectedState('')}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-100 hover:bg-indigo-200 rounded-lg transition-colors group"
-              >
-                <MapPin className="w-5 h-5 text-indigo-700" />
-                <div className="text-left">
-                  <div className="text-xs text-indigo-600 font-medium">Shipping to</div>
-                  <div className="text-sm font-bold text-indigo-900">{US_STATES.find(s => s.code === selectedState)?.name}</div>
+            {/* User menu */}
+            <div className="flex items-center gap-3">
+              {user && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-lg">
+                  <User className="w-4 h-4 text-gray-600" />
+                  <span className="text-sm text-gray-700 hidden sm:inline">{user.email}</span>
+                  <button
+                    onClick={signOut}
+                    className="ml-2 p-1 hover:bg-gray-200 rounded transition-colors"
+                    title="Sign out"
+                  >
+                    <LogOut className="w-4 h-4 text-gray-500 hover:text-red-600" />
+                  </button>
                 </div>
-                <span className="text-xs text-indigo-600 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">Change</span>
-              </button>
-            )}
+              )}
+
+              {activeTab === 'calculators' && selectedState && (
+                <button
+                  onClick={() => setSelectedState('')}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-100 hover:bg-indigo-200 rounded-lg transition-colors group"
+                >
+                  <MapPin className="w-5 h-5 text-indigo-700" />
+                  <div className="text-left">
+                    <div className="text-xs text-indigo-600 font-medium">Shipping to</div>
+                    <div className="text-sm font-bold text-indigo-900">{US_STATES.find(s => s.code === selectedState)?.name}</div>
+                  </div>
+                  <span className="text-xs text-indigo-600 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">Change</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Main Navigation Tabs */}
