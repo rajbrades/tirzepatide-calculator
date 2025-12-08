@@ -1779,9 +1779,12 @@ const TestosteroneCalculator = ({ selectedState }) => {
   const totalCost = dispensersNeeded * costPerDispenser;
   const totalDose = (concentration / 4) * totalClicks;
 
+  const dosePerApplication = (clicksPerApplication * concentration) / 4;
+  const dailyDose = (clicksPerDay * concentration) / 4;
+
   const copyTestosteroneSummary = () => {
     const stateName = US_STATES.find(s => s.code === selectedState)?.name;
-    
+
     const summary = `
 TESTOSTERONE TOPICAL ORDER SUMMARY
 ==================================
@@ -1792,9 +1795,9 @@ Type: ${medicationType === 'men' ? "Men's" : "Women's"} Testosterone
 Concentration: ${concentration}mg/ml
 
 DOSING:
-${clicksPerApplication} clicks per application
+${clicksPerApplication} clicks per application = ${dosePerApplication.toFixed(2)}mg per application
 ${frequency === 'once' ? 'Once' : 'Twice'} daily
-Total: ${clicksPerDay} clicks/day
+Total: ${clicksPerDay} clicks/day = ${dailyDose.toFixed(2)}mg/day
 
 TOTALS:
 Total Clicks Needed: ${totalClicks.toLocaleString()}
@@ -1939,10 +1942,13 @@ Total Cost: $${totalCost.toFixed(2)}
         </div>
         <div className="mt-4 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
           <p className="text-sm text-indigo-800">
-            <strong>Dosing Summary:</strong> {clicksPerApplication} {clicksPerApplication === 1 ? 'click' : 'clicks'} × {frequency === 'once' ? '1 time' : '2 times'} per day = <strong>{clicksPerApplication * applicationsPerDay} clicks/day</strong>
+            <strong>Dosing Summary:</strong> {clicksPerApplication} {clicksPerApplication === 1 ? 'click' : 'clicks'} × {concentration}mg/ml ÷ 4 = <strong>{((clicksPerApplication * concentration) / 4).toFixed(2)}mg per application</strong>
           </p>
-          <p className="text-xs text-indigo-700 mt-1">
-            (1 ml = 4 clicks = {concentration}mg)
+          <p className="text-sm text-indigo-800 mt-1">
+            {frequency === 'once' ? '1 time' : '2 times'} per day = <strong>{((clicksPerApplication * applicationsPerDay * concentration) / 4).toFixed(2)}mg/day</strong>
+          </p>
+          <p className="text-xs text-indigo-700 mt-2">
+            (1 click = 0.25ml = {(concentration / 4).toFixed(2)}mg)
           </p>
         </div>
       </div>
@@ -2008,22 +2014,26 @@ Total Cost: $${totalCost.toFixed(2)}
       <div className="overflow-x-auto">
         <h3 className="text-lg font-semibold text-gray-800 mb-3">Daily Application Schedule</h3>
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div className="p-4 bg-indigo-50 rounded-lg">
               <div className="text-sm text-gray-600 mb-1">Clicks per Application</div>
               <div className="text-3xl font-bold text-indigo-600">{clicksPerApplication}</div>
+            </div>
+            <div className="p-4 bg-green-50 rounded-lg border-2 border-green-200">
+              <div className="text-sm text-gray-600 mb-1">Dose per Application</div>
+              <div className="text-3xl font-bold text-green-600">{((clicksPerApplication * concentration) / 4).toFixed(1)}mg</div>
             </div>
             <div className="p-4 bg-indigo-50 rounded-lg">
               <div className="text-sm text-gray-600 mb-1">Applications per Day</div>
               <div className="text-3xl font-bold text-indigo-600">{applicationsPerDay}</div>
             </div>
-            <div className="p-4 bg-indigo-50 rounded-lg">
-              <div className="text-sm text-gray-600 mb-1">Total Clicks per Day</div>
-              <div className="text-3xl font-bold text-indigo-600">{clicksPerApplication * applicationsPerDay}</div>
+            <div className="p-4 bg-green-50 rounded-lg border-2 border-green-200">
+              <div className="text-sm text-gray-600 mb-1">Total Daily Dose</div>
+              <div className="text-3xl font-bold text-green-600">{((clicksPerApplication * applicationsPerDay * concentration) / 4).toFixed(1)}mg</div>
             </div>
           </div>
           <div className="mt-4 p-3 bg-gray-50 rounded text-center text-sm text-gray-600">
-            Each click delivers approximately <strong>{(concentration / 4).toFixed(2)}mg</strong> of testosterone
+            Each click delivers <strong>{(concentration / 4).toFixed(2)}mg</strong> of testosterone ({clicksPerApplication} clicks × {(concentration / 4).toFixed(2)}mg = <strong>{((clicksPerApplication * concentration) / 4).toFixed(2)}mg per application</strong>)
           </div>
         </div>
       </div>
