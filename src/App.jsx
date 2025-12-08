@@ -922,6 +922,7 @@ const TirzepatideCalculator = ({ selectedState }) => {
             .from('products')
             .select('*, pharmacies(name)')
             .eq('active', true)
+            .ilike('name', '%tirzepatide%')
             .order('concentration', { ascending: true }),
           supabase
             .from('shipping_restrictions')
