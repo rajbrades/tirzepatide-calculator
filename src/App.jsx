@@ -1421,7 +1421,7 @@ const TesamorelinCalculator = ({ selectedState }) => {
   const [shippingRestrictions, setShippingRestrictions] = useState([]);
   const [duration, setDuration] = useState(12);
   const [dailyDose, setDailyDose] = useState(1.0);
-  const [copied, setCopied] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -1556,8 +1556,8 @@ Route: Subcutaneous injection
     `.trim();
 
     navigator.clipboard.writeText(summary);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopiedId(rec.product.id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   if (loading) {
@@ -1659,12 +1659,12 @@ Route: Subcutaneous injection
                     <button
                       onClick={() => copyToClipboard(rec)}
                       className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                        copied
+                        copiedId === rec.product.id
                           ? 'bg-green-600 text-white'
                           : 'bg-indigo-600 text-white hover:bg-indigo-700'
                       }`}
                     >
-                      {copied ? (
+                      {copiedId === rec.product.id ? (
                         <>
                           <Check className="w-4 h-4" />
                           Copied!
