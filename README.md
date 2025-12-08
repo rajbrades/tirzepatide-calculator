@@ -1,8 +1,12 @@
 # 10X Medication Calculator
 
-A comprehensive React-based medication calculator for 10X Health, featuring tirzepatide dosage calculations and pharmacy shipping lookup.
+A comprehensive React-based medication calculator for 10X Health, featuring dosage calculations for multiple medications and pharmacy shipping lookup.
 
 ## Features
+
+### Authentication
+- **Microsoft SSO:** Domain-restricted login via @10xhealthsystem.com
+- **Email Magic Link:** Alternative authentication option for authorized users
 
 ### Dosage Calculators
 
@@ -19,15 +23,26 @@ A comprehensive React-based medication calculator for 10X Health, featuring tirz
   - Units for insulin syringes (100 units = 1ml)
   - Cost and retail pricing with margin analysis
 
+#### Tesamorelin (Injectable)
+- **Multi-Pharmacy Support:** Products from multiple pharmacies
+- **State-Based Filtering:** Automatically filters by shipping availability
+- **Daily Dosing Protocol:** 6 days/week (Monday-Saturday) schedule
+- **Flexible Dose Selection:** 0.8mg to 2.0mg daily options
+- **Product Recommendations:** Ranked by least overage
+- **Copy Summary:** One-click order summary with pricing and instructions
+
 #### Testosterone (Topical)
 - Men's and Women's formulations
-- Multiple concentration options
-- Click-based dosing calculations
+- Multiple concentration options (Men: 100-250mg/ml, Women: 1-3mg/ml)
+- Click-based dosing calculations with effective dose display
+- Dose per application and total daily dose calculations
 - Dispenser quantity recommendations
+- Copy-to-clipboard summary with full dosing details
 
 ### Ship To State Lookup
 - **State Selection:** Check pharmacy shipping availability by state
-- **Medication Filtering:** Filter results by medication type (Tirzepatide, Semaglutide, Testosterone, etc.)
+- **Multi-Medication Filtering:** Search and filter by multiple medications simultaneously
+- **Searchable Medication Select:** Autocomplete dropdown supporting 400+ medications
 - **Expandable Product Cards:** View available products and costs for each pharmacy
 - **Status Categories:**
   - Can Ship (green) - Full shipping available
@@ -99,19 +114,24 @@ This creates and populates:
 
 ## How to Use
 
+### Authentication
+1. Navigate to the application URL
+2. Sign in with Microsoft SSO (@10xhealthsystem.com) or use email magic link
+3. Check your email for the magic link if using email authentication
+
 ### Dosage Calculator
 1. Select the "Dosage Calculators" tab
 2. Choose the patient's delivery state
-3. Select medication type (Tirzepatide or Testosterone)
-4. Set prescription duration
-5. Choose titration schedule (standard or custom)
+3. Select medication type (Tirzepatide, Tesamorelin, or Testosterone)
+4. Set prescription duration and dosing parameters
+5. For Tirzepatide: Choose titration schedule (standard or custom)
 6. View ranked product recommendations
-7. Copy medical directive for patient instructions
+7. Copy summary or medical directive for patient instructions
 
 ### Ship To State Lookup
 1. Select the "Ship To State Lookup" tab
 2. Choose a state from the dropdown
-3. Optionally filter by medication type
+3. Search and select one or more medications to filter by
 4. Click pharmacy cards to view available products and pricing
 
 ## Building for Production
@@ -142,8 +162,9 @@ This calculator is for educational and reference purposes only.
 - React 18
 - Vite
 - Tailwind CSS
-- Supabase (PostgreSQL)
+- Supabase (PostgreSQL + Auth)
 - Lucide React (icons)
+- Microsoft SSO (Azure AD)
 
 ## Project Structure
 
@@ -151,7 +172,9 @@ This calculator is for educational and reference purposes only.
 10X-Medication-Calculator/
 ├── src/
 │   ├── App.jsx          # Main application with all components
-│   ├── main.jsx         # Application entry point
+│   ├── main.jsx         # Application entry point with auth routing
+│   ├── LoginPage.jsx    # Authentication page (SSO + Magic Link)
+│   ├── AuthContext.jsx  # Supabase auth context provider
 │   └── index.css        # Tailwind CSS imports
 ├── scripts/
 │   ├── seed-all-data.sql    # Complete database seed script
