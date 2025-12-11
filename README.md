@@ -2,6 +2,13 @@
 
 A comprehensive React-based medication calculator for 10X Health, featuring dosage calculations for multiple medications and pharmacy shipping lookup.
 
+## Authentication
+
+Access is restricted to @10xhealthsystem.com email accounts.
+
+- **Email Magic Link:** Enter your work email to receive a sign-in link
+- **Microsoft SSO:** Sign in with your Microsoft 365 account (requires Azure AD configuration)
+
 ## Features
 
 ### Authentication
@@ -24,11 +31,13 @@ A comprehensive React-based medication calculator for 10X Health, featuring dosa
   - Cost and retail pricing with margin analysis
 
 #### Tesamorelin (Injectable)
-- **Multi-Pharmacy Support:** Products from multiple pharmacies
+- **Pharmacy Options:** Brooksville and Wellvi products
+- **Dosing:** 0.8mg to 2.0mg in 0.2mg increments
+- **Duration:** 4-12 weeks
+- **Schedule:** 6 days per week (Monday-Saturday)
 - **State-Based Filtering:** Automatically filters by shipping availability
-- **Daily Dosing Protocol:** 6 days/week (Monday-Saturday) schedule
-- **Flexible Dose Selection:** 0.8mg to 2.0mg daily options
 - **Product Recommendations:** Ranked by least overage
+- **Cost Analysis:** Cost per mg and gross margin calculations
 - **Copy Summary:** One-click order summary with pricing and instructions
 
 #### Testosterone (Topical)
@@ -43,6 +52,9 @@ A comprehensive React-based medication calculator for 10X Health, featuring dosa
 - **State Selection:** Check pharmacy shipping availability by state
 - **Multi-Medication Filtering:** Search and filter by multiple medications simultaneously
 - **Searchable Medication Select:** Autocomplete dropdown supporting 400+ medications
+- **Smart Pharmacy Matching:**
+  - **Full Match (green):** Pharmacies that carry ALL selected medications
+  - **Partial Match (grey):** Pharmacies that carry only some selected medications
 - **Expandable Product Cards:** View available products and costs for each pharmacy
 - **Status Categories:**
   - Can Ship (green) - Full shipping available
@@ -172,9 +184,9 @@ This calculator is for educational and reference purposes only.
 10X-Medication-Calculator/
 ├── src/
 │   ├── App.jsx          # Main application with all components
-│   ├── main.jsx         # Application entry point with auth routing
-│   ├── LoginPage.jsx    # Authentication page (SSO + Magic Link)
 │   ├── AuthContext.jsx  # Supabase auth context provider
+│   ├── LoginPage.jsx    # Authentication page (SSO + Magic Link)
+│   ├── main.jsx         # Application entry point with auth routing
 │   └── index.css        # Tailwind CSS imports
 ├── scripts/
 │   ├── seed-all-data.sql    # Complete database seed script
